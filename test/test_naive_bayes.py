@@ -82,7 +82,7 @@ class TestNaiveBayes(unittest.TestCase):
             diff = propensities[i] - model.get_propensities()[i]
             self.assertAlmostEqual(diff, 0.0, places=1)
 
-    def test_get_labels_binary(self):
+    def test_get_label_distribution_binary(self):
         m = 10000
         n = 10
 
@@ -104,7 +104,7 @@ class TestNaiveBayes(unittest.TestCase):
         self.assertAlmostEqual(diff, 0.0, places=3)
 
         # Checks label inference
-        labels = model.get_labels(labels_train)
+        labels = model.get_label_distribution(labels_train)
         correct = 0
         for i in range(m):
             if gold_train[i] == np.argmax(labels[i, :]) + 1:
@@ -112,7 +112,7 @@ class TestNaiveBayes(unittest.TestCase):
 
         self.assertGreater(float(correct) / m, .925)
 
-    def test_get_labels_multiclass(self):
+    def test_get_label_distribution_multiclass(self):
         m = 10000
         n = 10
 
@@ -135,7 +135,7 @@ class TestNaiveBayes(unittest.TestCase):
         self.assertAlmostEqual(diff, 0.0, places=3)
 
         # Checks label inference
-        labels = model.get_labels(labels_train)
+        labels = model.get_label_distribution(labels_train)
         correct = 0
         for i in range(m):
             if gold_train[i] == np.argmax(labels[i, :]) + 1:

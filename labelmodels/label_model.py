@@ -33,7 +33,7 @@ class LabelModel(nn.Module):
         """
         raise NotImplementedError
 
-    def get_labels(self, *args):
+    def get_label_distribution(self, *args):
         """
 
         :param args:

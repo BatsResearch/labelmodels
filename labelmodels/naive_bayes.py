@@ -103,7 +103,7 @@ class NaiveBayes(LabelModel):
 
         self._do_estimate_label_model(batcher, config)
 
-    def get_labels(self, votes):
+    def get_label_distribution(self, votes):
         labels = np.ndarray((votes.shape[0], self.num_classes))
         log_acc = self.lf_accuracy.detach().numpy()
         log_class_balance = self.class_balance.detach().numpy()
