@@ -1,6 +1,6 @@
 # Travis CI config for LabelModels
 
-dist: trusty
+dist: xenial
 sudo: false
 language: python
 python:
