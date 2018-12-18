@@ -23,4 +23,4 @@ install:
   - pip install -q .
 
 script:
-  - python test/learning/test_naive_bayes.py
+  - python test/test_naive_bayes.py
