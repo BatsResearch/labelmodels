@@ -20,7 +20,6 @@ before_install:
   - conda info --all
 
 install:
-  - conda install --quiet pytorch -c pytorch
   - pip install .
 
 script:
