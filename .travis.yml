@@ -20,7 +20,7 @@ before_install:
   - conda info --all
 
 install:
-  - pip install .
+  - pip install -q .
 
 script:
   - python test/learning/test_naive_bayes.py
