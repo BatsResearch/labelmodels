@@ -1,4 +1,4 @@
-from labelmodels import naive_bayes
+from labelmodels import NaiveBayes
 import numpy as np
 from scipy import sparse
 import unittest
@@ -6,12 +6,10 @@ import unittest
 
 class TestNaiveBayes(unittest.TestCase):
 
-    @classmethod
-    def setUpClass(cls):
+    def setUp(self):
         np.random.seed(0)
 
-    @classmethod
-    def tearDownClass(cls):
+    def tearDown(self):
         pass
 
     def test_estimate_label_model_binary(self):
@@ -24,8 +22,7 @@ class TestNaiveBayes(unittest.TestCase):
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = naive_bayes.NaiveBayes(2, n, learn_class_balance=True,
-                                       acc_prior=0.0)
+        model = NaiveBayes(2, n, learn_class_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for i in range(n):
@@ -48,8 +45,7 @@ class TestNaiveBayes(unittest.TestCase):
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = naive_bayes.NaiveBayes(5, n, learn_class_balance=True,
-                                       acc_prior=0.0)
+        model = NaiveBayes(5, n, learn_class_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for i in range(n):
@@ -72,7 +68,7 @@ class TestNaiveBayes(unittest.TestCase):
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = naive_bayes.NaiveBayes(2, n, init_lf_acc=.6, acc_prior=0.5)
+        model = NaiveBayes(2, n, init_lf_acc=.6, acc_prior=0.5)
         model.estimate_label_model(labels_train)
 
         for i in range(n):
@@ -93,7 +89,7 @@ class TestNaiveBayes(unittest.TestCase):
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = naive_bayes.NaiveBayes(2, n, init_lf_acc=.8)
+        model = NaiveBayes(2, n, init_lf_acc=.8)
         model.class_balance[0] = -1.1
         model.class_balance[1] = 1.1
 
@@ -123,7 +119,7 @@ class TestNaiveBayes(unittest.TestCase):
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = naive_bayes.NaiveBayes(3, n, init_lf_acc=.8)
+        model = NaiveBayes(3, n, init_lf_acc=.8)
         model.class_balance[0] = -1.08
         model.class_balance[1] = -1.08
         model.class_balance[2] = 1

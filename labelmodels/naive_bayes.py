@@ -21,6 +21,22 @@ class NaiveBayes(LabelModel):
 
     def __init__(self, num_classes, num_lfs, init_lf_acc=.6, acc_prior=.01,
                  learn_class_balance=False):
+        """Constructor.
+
+        Initializes labeling function accuracies using kwarg and all other model
+        parameters uniformly.
+
+        :param num_classes: number of target classes, i.e., binary
+                            classification = 2
+        :param num_lfs: number of labeling functions to model
+        :param init_lf_acc: initial estimated labeling function accuracy, must
+                            be a float in [0,1]
+        :param acc_prior: strength of regularization of estimated labeling
+        function accuracies toward their initial values
+        :param learn_class_balance: whether to estimate the distribution over
+                                    target classes (True) or assume to be
+                                    uniform (False)
+        """
         super(LabelModel, self).__init__()
 
         # Converts init_lf_acc to log scale
@@ -28,8 +44,8 @@ class NaiveBayes(LabelModel):
 
         # Initializes parameters
         self.lf_accuracy = nn.Parameter(torch.tensor([init_lf_acc] * num_lfs))
-        self.lf_propensity = nn.Parameter(torch.tensor([0.0] * num_lfs))
-        self.class_balance = nn.Parameter(torch.tensor([0.0] * num_classes),
+        self.lf_propensity = nn.Parameter(torch.zeros([num_lfs]))
+        self.class_balance = nn.Parameter(torch.zeros([num_classes]),
                                           requires_grad=learn_class_balance)
 
         # Saves state

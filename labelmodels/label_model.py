@@ -8,7 +8,7 @@ class LabelModel(nn.Module):
     """Parent class for all generative label models.
 
     Subclasses should implement at least forward(), estimate_label_model(), and
-    get_labels().
+    get_label_distribution().
     """
 
     def forward(self, *args):
@@ -34,10 +34,11 @@ class LabelModel(nn.Module):
         raise NotImplementedError
 
     def get_label_distribution(self, *args):
-        """
+        """Returns the estimated posterior distribution over true labels given
+        observed labeling function outputs.
 
-        :param args:
-        :return:
+        :param args: observed labeling function outputs and related metadata
+        :return: distribution over true labels. Structure depends on model type
         """
         raise NotImplementedError
 
@@ -109,6 +110,11 @@ class LabelModel(nn.Module):
             #     logging.info('Val.  Loss: %.4f Acc: %.4f', epoch_loss, epoch_acc)
 
     def _get_regularization_loss(self):
+        """Gets the value of the regularization loss for the current values of
+        the model's parameters
+
+        :return: regularization loss
+        """
         return 0.0
 
 

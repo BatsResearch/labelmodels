@@ -18,7 +18,7 @@ votes = np.random.randint(0, 3, size=(1000, 5))
 
 # We now can create a Naive Bayes generative model to estimate the accuracies
 # of these label sources
-from labelmodels.naive_bayes import NaiveBayes
+from labelmodels import NaiveBayes
 
 # We initialize the model by specifying that there are 2 classes (binary
 # classification) and 5 label sources
