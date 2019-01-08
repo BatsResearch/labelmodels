@@ -2,6 +2,7 @@ from labelmodels import NaiveBayes
 import numpy as np
 from scipy import sparse
 import unittest
+import ..util
 
 
 class TestNaiveBayes(unittest.TestCase):
@@ -82,7 +83,7 @@ class TestNaiveBayes(unittest.TestCase):
         m = 10000
         n = 10
 
-        accuracies = np.array([.8, .8, .8, .8, .8, .8, .8, .8, .8, .8])
+        accuracies = np.array([.8] * n)
         propensities = np.array([.5] * n)
         class_balance = np.array([.1, .9])
 
@@ -112,7 +113,7 @@ class TestNaiveBayes(unittest.TestCase):
         m = 10000
         n = 10
 
-        accuracies = np.array([.8, .8, .8, .8, .8, .8, .8, .8, .8, .8])
+        accuracies = np.array([.8] * n)
         propensities = np.array([.5] * n)
         class_balance = np.array([.1, .1, .8])
 
@@ -138,6 +139,38 @@ class TestNaiveBayes(unittest.TestCase):
                 correct += 1
 
         self.assertGreater(float(correct) / m, .85)
+
+    def test_input_formats(self):
+        m = 1000
+        n = 3
+
+        accuracies = np.array([.8] * 3)
+        propensities = np.array([.5] * n)
+        class_balance = np.array([.1, .1, .8])
+
+        labels_train, _ = _generate_data(
+            m, n, accuracies, propensities, class_balance)
+
+        # Generates other data formats to test
+
+
+        # Trains the model on the generated data
+        model = NaiveBayes(3, n)
+        model.estimate_label_model(labels_train)
+        accuracies = model.get_accuracies()
+        propensities = model.get_propensities()
+        class_balance = model.get_class_balance()
+
+        # Checks that other input formats work and do not change the results
+        for data in util.get_all_formats(labels_train):
+            model = NaiveBayes(3, n)
+            model.estimate_label_model(data)
+            diff = np.sum(np.abs(accuracies - model.get_accuracies()))
+            self.assertAlmostEqual(diff, 0.0)
+            diff = np.sum(np.abs(propensities - model.get_propensities()))
+            self.assertAlmostEqual(diff, 0.0)
+            diff = np.sum(np.abs(class_balance - model.get_class_balance()))
+            self.assertAlmostEqual(diff, 0.0)
 
 
 def _generate_data(m, n, accuracies, propensities, class_balance):

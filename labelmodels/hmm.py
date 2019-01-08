@@ -21,8 +21,8 @@ class HMM(LabelModel):
                  learn_start_balance=False):
         """Constructor.
 
-        Initializes labeling function accuracies using kwarg and all other model
-        parameters uniformly.
+        Initializes labeling function accuracies using optional argument and all
+        other model parameters uniformly.
 
         :param num_classes: number of target classes, i.e., binary
                             classification = 2
@@ -30,7 +30,7 @@ class HMM(LabelModel):
         :param init_lf_acc: initial estimated labeling function accuracy, must
                             be a float in [0,1]
         :param acc_prior: strength of regularization of estimated labeling
-        function accuracies toward their initial values
+                          function accuracies toward their initial values
         :param learn_start_balance: whether to estimate the distribution over
                                     target classes for the start of a sequence
                                     (True) or assume to be uniform (False)
@@ -62,19 +62,23 @@ class HMM(LabelModel):
         scipy.sparse.coo_matrix. You can avoid a conversion by passing in votes
         with this class.
 
-        :param votes: m x n matrix in {0, ..., k}, where m is the batch size,
-                      n is the number of labeling functions and k is the number
-                      of classes
-        :param seq_starts:
-        :return: 1-d tensor of length m, where each element is the
-                 log-likelihood of the corresponding row in labels
+        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
+                      lengths of the sequences in the batch, n is the number of
+                      labeling functions and k is the number of classes
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, votes[seq_starts[i]] is
+                           the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :return: vector of length l, where element is the log-likelihood of the
+                 corresponding sequence of outputs in votes
         """
         raise NotImplementedError
 
     def _get_regularization_loss(self):
         return self.acc_prior * torch.norm(self.lf_accuracy - self.init_lf_acc)
 
-    def estimate_label_model(self, votes, config=None):
+    def estimate_label_model(self, votes, seq_starts, config=None):
         if config is None:
             config = LearningConfig()
 
