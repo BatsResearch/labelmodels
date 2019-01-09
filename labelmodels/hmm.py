@@ -1,4 +1,4 @@
-from .label_model import LabelModel, LearningConfig
+from .label_model import LabelModel, LearningConfig, init_random
 import numpy as np
 from scipy import sparse
 import torch
@@ -76,37 +76,52 @@ class HMM(LabelModel):
         raise NotImplementedError
 
     def _get_regularization_loss(self):
+        """Computes the regularization loss of the model:
+        acc_prior * \|lf_accuracy - init_lf_accuracy\|
+
+        :return: value of regularization loss
+        """
         return self.acc_prior * torch.norm(self.lf_accuracy - self.init_lf_acc)
 
     def estimate_label_model(self, votes, seq_starts, config=None):
+        """Estimates the parameters of the label model based on observed
+        labeling function outputs.
+
+        Note that a minibatch's size refers to the number of sequences in the
+        minibatch.
+
+        :param votes: m x n matrix in {0, ..., k}, where m is the batch size,
+                      n is the number of labeling functions and k is the number
+                      of classes
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, votes[seq_starts[i]] is
+                           the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :param config: optional LearningConfig instance. If None, initialized
+                       with default constructor
+        """
         if config is None:
             config = LearningConfig()
 
+        # Initializes random seed
+        init_random(config.random_seed)
+
+        # Converts to CSR and integers to standardize input
+        votes = sparse.csr_matrix(votes, dtype=np.int)
+        seq_starts = np.ndarray(seq_starts, dtype=np.int)
+
+        # TODO: shuffle sequences
+
+        # Creates minibatches
         batcher = list(sparse.coo_matrix(
             votes[i * config.batch_size: (i + 1) * config.batch_size, :])
                        for i in range(int(np.ceil(votes.shape[0] / config.batch_size))))
 
         self._do_estimate_label_model(batcher, config)
 
-    def get_label_distribution(self, votes):
-        labels = np.ndarray((votes.shape[0], self.num_classes))
-        log_acc = self.lf_accuracy.detach().numpy()
-        log_class_balance = self.class_balance.detach().numpy()
-
-        temp = np.ndarray((self.num_classes,))
-        for i in range(labels.shape[0]):
-            temp[:] = log_class_balance
-
-            for j in range(self.num_lfs):
-                vote = votes[i, j]
-                if vote != 0:
-                    temp[vote - 1] += log_acc[j]
-
-            # Softmax
-            e_temp = np.exp(temp - np.max(temp))
-            labels[i, :] = e_temp / e_temp.sum()
-
-        return labels
+    def get_label_distribution(self, votes, seq_starts):
+        raise NotImplementedError
 
     def get_accuracies(self):
         """Returns the model's estimated labeling function accuracies
@@ -132,13 +147,26 @@ class HMM(LabelModel):
                 + np.exp(propensities - accuracies)
         return score / (score + 1)
 
-    def get_class_balance(self):
-        """Returns the model's estimated class balance
+    def get_start_balance(self):
+        """Returns the model's estimated class balance for the start of a
+        sequence
 
         :return: a NumPy array with one element in [0,1] for each target class,
-                 representing the estimated prior probability that an example
-                 has that label
+                 representing the estimated prior probability that the first
+                 element in an example sequence has that label
         """
-        class_balance = self.class_balance.detach().numpy()
-        p = np.exp(class_balance - np.max(class_balance))
+        start_balance = self.start_balance.detach().numpy()
+        p = np.exp(start_balance - np.max(start_balance))
         return p / p.sum()
+
+    def get_transition_matrix(self):
+        """Returns the model's estimated transition distribution from class
+        label to class label in a sequence.
+
+        :return: a k x k Numpy matrix, in which each element i, j is the
+        probability p(c_{t+1} = j | c_{t} = i)
+        """
+        transitions = self.transitions.detach().numpy()
+        for i in range(transitions.shape[0]):
+            transitions[i] = np.exp(transitions[i] - np.max(transitions[i]))
+            transitions[i] = transitions[i] / transitions[i].sum()

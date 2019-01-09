@@ -1,7 +1,7 @@
 from labelmodels import NaiveBayes
 import numpy as np
 from scipy import sparse
-from test import util
+import test.util as util
 import unittest
 
 

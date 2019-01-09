@@ -107,7 +107,7 @@ class NaiveBayes(LabelModel):
 
     def _get_regularization_loss(self):
         """Computes the regularization loss of the model:
-           acc_prior * \|lf_accuracy - init_lf_accuracy\|
+        acc_prior * \|lf_accuracy - init_lf_accuracy\|
 
         :return: value of regularization loss
         """
