@@ -86,28 +86,6 @@ class LabelModel(nn.Module):
             epoch_loss = running_loss / (i_batch + 1)
             logging.info('Train Loss: %.6f', epoch_loss)
 
-            # if val is not None:
-            #     # Sets model to validation mode
-            #     self.eval()
-            #     running_loss = 0.0
-            #     running_corrects = 0
-            #
-            #     # Iterates over validation data
-            #     for inputs, labels in val:
-            #
-            #         with torch.set_grad_enabled(False):
-            #             outputs = model(inputs)
-            #             loss = criterion(outputs, labels)
-            #
-            #             _, preds = torch.max(outputs, 1)
-            #
-            #         running_loss += loss.item() * inputs.size(0)
-            #         running_corrects += torch.sum(preds == labels.data)
-            #
-            #     epoch_loss = running_loss / len(val.dataset)
-            #     epoch_acc = running_corrects.double() / len(val.dataset)
-            #     logging.info('Val.  Loss: %.4f Acc: %.4f', epoch_loss, epoch_acc)
-
     def _get_regularization_loss(self):
         """Gets the value of the regularization loss for the current values of
         the model's parameters

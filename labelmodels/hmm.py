@@ -114,11 +114,22 @@ class HMM(LabelModel):
         # TODO: shuffle sequences
 
         # Creates minibatches
-        batcher = list(sparse.coo_matrix(
-            votes[i * config.batch_size: (i + 1) * config.batch_size, :])
-                       for i in range(int(np.ceil(votes.shape[0] / config.batch_size))))
+        seq_start_batches = [np.array(
+            seq_starts[i * config.batch_size: (i + 1) * config.batch_size, :],
+            copy=True)
+            for i in range(int(np.ceil(votes.shape[0] / config.batch_size)))
+       ]
 
-        self._do_estimate_label_model(batcher, config)
+        vote_batches = []
+        for seq_start_batch in seq_start_batches:
+            vote_batches.append(
+                sparse.coo_matrix(
+                    votes[seq_start_batch[0]:seq_start_batch[-1]], copy=True
+                )
+            )
+
+        batches = zip(vote_batches, seq_start_batches)
+        self._do_estimate_label_model(batches, config)
 
     def get_label_distribution(self, votes, seq_starts):
         raise NotImplementedError
@@ -164,7 +175,7 @@ class HMM(LabelModel):
         label to class label in a sequence.
 
         :return: a k x k Numpy matrix, in which each element i, j is the
-        probability p(c_{t+1} = j | c_{t} = i)
+        probability p(c_{t+1} = j + 1 | c_{t} = i + 1)
         """
         transitions = self.transitions.detach().numpy()
         for i in range(transitions.shape[0]):

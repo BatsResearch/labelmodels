@@ -138,13 +138,13 @@ class NaiveBayes(LabelModel):
         votes = votes[index, :]
 
         # Creates minibatches
-        batcher = [sparse.coo_matrix(
+        batches = [sparse.coo_matrix(
             votes[i * config.batch_size: (i+1) * config.batch_size, :],
             copy=True)
             for i in range(int(np.ceil(votes.shape[0] / config.batch_size)))
         ]
 
-        self._do_estimate_label_model(batcher, config)
+        self._do_estimate_label_model(batches, config)
 
     def get_label_distribution(self, votes):
         """Returns the posterior distribution over true labels given labeling

@@ -14,7 +14,34 @@ class TestHMM(unittest.TestCase):
         pass
 
     def test_estimate_label_model_binary(self):
-        pass
+        n = 5
+        k = 2
+
+        accuracies = np.array([.8] * n)
+        propensities = np.array([.5] * n)
+        start_balance = np.array([.1, .9])
+        transitions = np.array([.5, .5], [.1, .9])
+
+        labels_train, seq_starts_train, gold_train = _generate_data(
+            100, 8, 12, n, accuracies, propensities, start_balance, transitions
+        )
+
+        model = HMM(k, n, learn_start_balance=True)
+        model.estimate_label_model(labels_train, seq_starts_train)
+
+        for i in range(n):
+            diff = accuracies[i] - model.get_accuracies()[i]
+            self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(n):
+            diff = propensities[i] - model.get_propensities()[i]
+            self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(k):
+            diff = start_balance[i] - model.get_start_balance()[i]
+            self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(k):
+            for j in range(k):
+                diff = transitions[i, j] - model.get_transition_matrix()[i, j]
+                self.assertAlmostEqual(diff, 0.0, places=1)
 
 
 def _generate_data(num_seqs, min_seq, max_seq, num_lfs, accuracies,
