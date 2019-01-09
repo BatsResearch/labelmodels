@@ -1,6 +1,7 @@
 from labelmodels import HMM
 import numpy as np
 from scipy import sparse
+from test import util
 import unittest
 
 
@@ -58,7 +59,6 @@ def _generate_data(num_seqs, min_seq, max_seq, num_lfs, accuracies,
                     val.append(np.argmax(np.random.multinomial(1, dist)))
 
     labels = sparse.coo_matrix((val, (row, col)), shape=(total_len, num_lfs))
-    labels = labels.tocsr()
 
     return labels, seq_starts, gold
 

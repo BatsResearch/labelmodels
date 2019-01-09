@@ -50,7 +50,6 @@ class LabelModel(nn.Module):
                               produces tuples.
         :param config: an instance of LearningConfig
         """
-        init_random(config.random_seed)
 
         # Sets up optimization hyperparameters
         optimizer = torch.optim.SGD(

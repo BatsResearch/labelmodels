@@ -1,4 +1,4 @@
-from .label_model import LabelModel, LearningConfig
+from .label_model import LabelModel, LearningConfig, init_random
 import numpy as np
 from scipy import sparse
 import torch
@@ -126,9 +126,23 @@ class NaiveBayes(LabelModel):
         if config is None:
             config = LearningConfig()
 
-        batcher = list(sparse.coo_matrix(
-            votes[i * config.batch_size: (i+1) * config.batch_size, :])
-                       for i in range(int(np.ceil(votes.shape[0] / config.batch_size))))
+        # Initializes random seed
+        init_random(config.random_seed)
+
+        # Converts to CSR to standardize input
+        votes = sparse.csr_matrix(votes, dtype=np.int)
+
+        # Shuffles rows
+        index = np.arange(np.shape(votes)[0])
+        np.random.shuffle(index)
+        votes = votes[index, :]
+
+        # Creates minibatches
+        batcher = [sparse.coo_matrix(
+            votes[i * config.batch_size: (i+1) * config.batch_size, :],
+            copy=True)
+            for i in range(int(np.ceil(votes.shape[0] / config.batch_size)))
+        ]
 
         self._do_estimate_label_model(batcher, config)
 
@@ -142,6 +156,7 @@ class NaiveBayes(LabelModel):
         :return: m x k matrix, where each row is the posterior distribution over
                  the true class label for the corresponding example
         """
+        votes = sparse.csr_matrix(votes, dtype=np.int, copy=True)
         labels = np.ndarray((votes.shape[0], self.num_classes))
         log_acc = self.lf_accuracy.detach().numpy()
         log_class_balance = self.class_balance.detach().numpy()

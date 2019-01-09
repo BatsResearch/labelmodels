@@ -1,8 +1,8 @@
 from labelmodels import NaiveBayes
 import numpy as np
 from scipy import sparse
+from test import util
 import unittest
-import ..util
 
 
 class TestNaiveBayes(unittest.TestCase):
@@ -140,7 +140,7 @@ class TestNaiveBayes(unittest.TestCase):
 
         self.assertGreater(float(correct) / m, .85)
 
-    def test_input_formats(self):
+    def test_estimate_model_input_formats(self):
         m = 1000
         n = 3
 
@@ -150,9 +150,6 @@ class TestNaiveBayes(unittest.TestCase):
 
         labels_train, _ = _generate_data(
             m, n, accuracies, propensities, class_balance)
-
-        # Generates other data formats to test
-
 
         # Trains the model on the generated data
         model = NaiveBayes(3, n)
@@ -170,6 +167,28 @@ class TestNaiveBayes(unittest.TestCase):
             diff = np.sum(np.abs(propensities - model.get_propensities()))
             self.assertAlmostEqual(diff, 0.0)
             diff = np.sum(np.abs(class_balance - model.get_class_balance()))
+            self.assertAlmostEqual(diff, 0.0)
+
+    def test_get_label_input_formats(self):
+        m = 1000
+        n = 3
+
+        accuracies = np.array([.8] * 3)
+        propensities = np.array([.5] * n)
+        class_balance = np.array([.1, .1, .8])
+
+        labels_train, _ = _generate_data(
+            m, n, accuracies, propensities, class_balance)
+
+        # Gets the label distribution for the generated data
+        model = NaiveBayes(3, n, init_lf_acc=0.8)
+        distribution = model.get_label_distribution(labels_train)
+
+        # Checks that other input formats work and do not change the results
+        for data in util.get_all_formats(labels_train):
+            model = NaiveBayes(3, n, init_lf_acc=0.8)
+            new_distribution = model.get_label_distribution(data)
+            diff = np.sum(np.abs(distribution - new_distribution))
             self.assertAlmostEqual(diff, 0.0)
 
 
@@ -194,7 +213,7 @@ def _generate_data(m, n, accuracies, propensities, class_balance):
                     dist[gold[i]] = 0
                     val.append(np.argmax(np.random.multinomial(1, dist)))
 
-    labels = sparse.coo_matrix((val, (row, col)), shape=(m, n)).tocsr()
+    labels = sparse.coo_matrix((val, (row, col)), shape=(m, n))
     return labels, gold
 
 
