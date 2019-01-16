@@ -73,7 +73,48 @@ class HMM(LabelModel):
         :return: vector of length l, where element is the log-likelihood of the
                  corresponding sequence of outputs in votes
         """
-        raise NotImplementedError
+
+        if type(votes) != sparse.coo_matrix:
+            votes = sparse.coo_matrix(votes)
+
+        # Initializes joint log-likelihood of class and votes as an m x k matrix
+        jll = torch.zeros([votes.shape[0], self.num_classes])
+
+        # Initializes repeatedly used values
+        prop_plus_acc = self.lf_propensity + self.lf_accuracy
+        prop_minus_acc = self.lf_propensity - self.lf_accuracy
+        prop_minus_acc_scaled = prop_minus_acc - \
+                                torch.log(torch.tensor(self.num_classes - 1.0))
+
+        # Computes conditional log-likelihood normalizing constants and
+        # subtracts them from joint log-likelihoods
+        z = torch.cat((prop_plus_acc.unsqueeze(0),
+                       prop_minus_acc.unsqueeze(0),
+                       torch.zeros((1, self.num_lfs))), dim=0)
+        z = torch.logsumexp(z, dim=0)
+        jll -= torch.sum(z)
+
+        # Loops over votes and classes to compute joint log-likelihood
+        for i, j, v in zip(votes.row, votes.col, votes.data):
+            for k in range(self.num_classes):
+                if v == (k + 1):
+                    jll[i, k] += prop_plus_acc[j]
+                else:
+                    jll[i, k] += prop_minus_acc_scaled[j]
+
+        
+        for i in range(0, votes.shape[0]):
+            if i in seq_starts:
+                jll[i, :] += self.start_balance
+            else: 
+                jll[i, :] += torch.logsumexp(jll[i-1, :].unsqueeze(1).repeat(self.num_classes, self.num_classes) 
+                    + self.transitions, dim=1)
+
+        # Computes marginal log-likelihood for each example
+        mll = torch.logsumexp(jll[seq_starts], dim=1)
+
+        return mll
+
 
     def _get_regularization_loss(self):
         """Computes the regularization loss of the model:
