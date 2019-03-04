@@ -149,8 +149,7 @@ class HMM(LabelModel):
                            sequences in the batch. So, votes[seq_starts[i]] is
                            the row vector of labeling function outputs for the
                            first element in the ith sequence
-        :return: vector of length m, where element is the log-likelihood of the
-                 corresponding sequence of outputs in votes
+        :return: vector of length m, where element is the most likely predicted labels
         """
 
         jll = self.observation_likelihood(votes)
@@ -292,3 +291,4 @@ class HMM(LabelModel):
         for i in range(transitions.shape[0]):
             transitions[i] = np.exp(transitions[i] - np.max(transitions[i]))
             transitions[i] = transitions[i] / transitions[i].sum()
+        return transitions 
