@@ -120,20 +120,18 @@ class HMM(LabelModel):
                  corresponding sequence of outputs in votes
         """
 
-
         jll = self.observation_likelihood(votes)
-
         # normalize transition matrix
         nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim = 1)
         nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim = 0)
         for i in range(0, votes.shape[0]):
             if i in seq_starts:
                 jll[i, :] = jll[i, :] + nor_start_balance
-            else: 
+            else:              
                 jll[i, :] = jll[i, :]+torch.logsumexp(jll[i-1, :].clone().unsqueeze(1).repeat(
-                    1, self.num_classes) + nor_transitions, dim = 1)
-                
-        mll = torch.logsumexp(jll[seq_starts], dim = 1)
+                    1, self.num_classes) + nor_transitions, dim = 1) 
+        seq_ends = [x - 1 for x in seq_starts] + [len(votes)-1]
+        mll = torch.logsumexp(jll[seq_ends], dim = 1)
         return mll
 
 
