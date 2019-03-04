@@ -53,10 +53,10 @@ class HMM(LabelModel):
         self.init_lf_acc = init_lf_acc
         self.acc_prior = acc_prior
 
-    def forward(self, votes, seq_starts):
+    def observation_likelihood(self, votes):
+
         """
-        Computes log likelihood of sequence of labeling function outputs for
-        each (sequence) example in batch.
+        Computes log likelihood of joint log-likelihood of class and votes as an m x k matrix
 
         For efficiency, this function prefers that votes is an instance of
         scipy.sparse.coo_matrix. You can avoid a conversion by passing in votes
@@ -65,15 +65,9 @@ class HMM(LabelModel):
         :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
                       lengths of the sequences in the batch, n is the number of
                       labeling functions and k is the number of classes
-        :param seq_starts: vector of length l of row indices in votes indicating
-                           the start of each sequence, where l is the number of
-                           sequences in the batch. So, votes[seq_starts[i]] is
-                           the row vector of labeling function outputs for the
-                           first element in the ith sequence
-        :return: vector of length l, where element is the log-likelihood of the
-                 corresponding sequence of outputs in votes
+        :return: matrix of dimension m x k, where element is the joint 
+                 log-likelihood of class and votes
         """
-
         if type(votes) != sparse.coo_matrix:
             votes = sparse.coo_matrix(votes)
 
@@ -102,23 +96,97 @@ class HMM(LabelModel):
                 else:
                     jll[i, k] += prop_minus_acc_scaled[j]
 
-        
+        return jll
+
+    def forward(self, votes, seq_starts):
+
+        """
+        Computes log likelihood of sequence of labeling function outputs for
+        each (sequence) example in batch.
+
+        For efficiency, this function prefers that votes is an instance of
+        scipy.sparse.coo_matrix. You can avoid a conversion by passing in votes
+        with this class.
+
+        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
+                      lengths of the sequences in the batch, n is the number of
+                      labeling functions and k is the number of classes
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, votes[seq_starts[i]] is
+                           the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :return: vector of length l, where element is the log-likelihood of the
+                 corresponding sequence of outputs in votes
+        """
+
+
+        jll = self.observation_likelihood(votes)
+
+        # normalize transition matrix
+        nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim = 1)
+        nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim = 0)
         for i in range(0, votes.shape[0]):
             if i in seq_starts:
-                jll[i, :] += self.start_balance
+                jll[i, :] = jll[i, :] + nor_start_balance
             else: 
-                jll[i, :] += torch.logsumexp(jll[i-1, :].unsqueeze(1).repeat(self.num_classes, self.num_classes) 
-                    + self.transitions, dim=1)
-
-        # Computes marginal log-likelihood for each example
-        mll = torch.logsumexp(jll[seq_starts], dim=1)
-
+                jll[i, :] = jll[i, :]+torch.logsumexp(jll[i-1, :].clone().unsqueeze(1).repeat(
+                    1, self.num_classes) + nor_transitions, dim = 1)
+                
+        mll = torch.logsumexp(jll[seq_starts], dim = 1)
         return mll
 
 
+    def viterbi(self, votes, seq_starts):
+        """
+        Computes the most probable underlying sequence nodes given estimated parameters
+
+        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
+                      lengths of the sequences in the batch, n is the number of
+                      labeling functions and k is the number of classes
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, votes[seq_starts[i]] is
+                           the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :return: vector of length m, where element is the log-likelihood of the
+                 corresponding sequence of outputs in votes
+        """
+
+        jll = self.observation_likelihood(votes)
+        nor_transitions = self.transitions - torch.logsumexp(self.transitions, 1)
+        nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, 0)
+
+        T = votes.shape[0]
+        bt = torch.zeros([T, self.num_classes])
+        for i in range(0, T):
+            if i in seq_starts:
+                jll[i, :] += nor_start_balance
+            else: 
+                p = jll[i-1, :].clone().unsqueeze(1).repeat(
+                    1, self.num_classes) + nor_transitions
+                jll[i, :] += torch.max(p, dim = 0)[0]
+                bt[i, :] = torch.argmax(p, dim = 0)
+
+        seq_ends = [x - 1 for x in seq_starts] + [len(votes)-1]
+        res = []
+        j = T-1
+        while j >= 0:
+            if j in seq_ends:
+                res.append(torch.argmax(jll[j, :]).item())
+            if j in seq_starts:
+                j -= 1
+                continue
+            res.append(int(bt[j, res[-1]].item()))
+            j -= 1
+        res = [x + 1 for x in res] 
+        res.reverse()
+        return res
+
+              
     def _get_regularization_loss(self):
         """Computes the regularization loss of the model:
-        acc_prior * \|lf_accuracy - init_lf_accuracy\|
+        acc_prior * |lf_accuracy - init_lf_accuracy|
 
         :return: value of regularization loss
         """
@@ -150,15 +218,15 @@ class HMM(LabelModel):
 
         # Converts to CSR and integers to standardize input
         votes = sparse.csr_matrix(votes, dtype=np.int)
-        seq_starts = np.ndarray(seq_starts, dtype=np.int)
+        seq_starts = np.array(seq_starts, dtype=np.int)
 
         # TODO: shuffle sequences
 
         # Creates minibatches
         seq_start_batches = [np.array(
-            seq_starts[i * config.batch_size: (i + 1) * config.batch_size, :],
+            seq_starts[i * config.batch_size: ((i + 1) * config.batch_size + 1)],
             copy=True)
-            for i in range(int(np.ceil(votes.shape[0] / config.batch_size)))
+            for i in range(int(np.ceil(len(seq_starts) / config.batch_size)))
        ]
 
         vote_batches = []
@@ -169,7 +237,9 @@ class HMM(LabelModel):
                 )
             )
 
-        batches = zip(vote_batches, seq_start_batches)
+        seq_start_batches = [x[:-1]-x[0] for x in seq_start_batches]
+
+        batches = list(zip(vote_batches, seq_start_batches))
         self._do_estimate_label_model(batches, config)
 
     def get_label_distribution(self, votes, seq_starts):

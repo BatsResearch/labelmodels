@@ -64,6 +64,7 @@ class LabelModel(nn.Module):
         # Iterates over epochs
         for epoch in range(config.epochs):
             logging.info('Epoch {}/{}'.format(epoch + 1, config.epochs))
+            print('Epoch {}/{}'.format(epoch + 1, config.epochs))
             if scheduler is not None:
                 scheduler.step()
 
@@ -75,15 +76,14 @@ class LabelModel(nn.Module):
             i_batch = 0
             for i_batch, inputs in enumerate(input_batcher):
                 optimizer.zero_grad()
-                log_likelihood = self(inputs)
+                log_likelihood = self(*inputs)
                 loss = -1 * torch.mean(log_likelihood)
                 loss += self._get_regularization_loss()
                 loss.backward()
                 optimizer.step()
-
                 running_loss += loss
-
             epoch_loss = running_loss / (i_batch + 1)
+            print(epoch_loss)
             logging.info('Train Loss: %.6f', epoch_loss)
 
     def _get_regularization_loss(self):
