@@ -130,7 +130,7 @@ class HMM(LabelModel):
             else:              
                 jll[i, :] = jll[i, :]+torch.logsumexp(jll[i-1, :].clone().unsqueeze(1).repeat(
                     1, self.num_classes) + nor_transitions, dim = 1) 
-        seq_ends = [x - 1 for x in seq_starts] + [len(votes)-1][1:]
+        seq_ends = ([x - 1 for x in seq_starts] + [len(votes)-1])[1:]
         mll = torch.logsumexp(jll[seq_ends], dim = 1)
         return mll
 
