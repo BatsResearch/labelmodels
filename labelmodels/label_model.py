@@ -100,7 +100,7 @@ class LearningConfig(object):
 
     def __init__(self):
         """Initializes all hyperparameters to default values"""
-        self.epochs = 5
+        self.epochs = 10
         self.batch_size = 64
         self.step_size = 0.1
         self.step_schedule = None
