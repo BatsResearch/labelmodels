@@ -20,7 +20,7 @@ class TestHMM(unittest.TestCase):
         accuracies = np.array([.8] * n)
         propensities = np.array([.5] * n)
         start_balance = np.array([.1, .9])
-        transitions = np.array([.5, .5], [.1, .9])
+        transitions = np.array([[.5, .5], [.1, .9]])
 
         labels_train, seq_starts_train, gold_train = _generate_data(
             100, 8, 12, n, accuracies, propensities, start_balance, transitions

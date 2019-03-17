@@ -42,12 +42,12 @@ class LabelModel(nn.Module):
         """
         raise NotImplementedError
 
-    def _do_estimate_label_model(self, input_batcher, config):
+    def _do_estimate_label_model(self, batches, config):
         """Internal method for optimizing model parameters.
 
-        :param input_batcher: generator that produces batches of inputs to
-                              forward(). If forward() takes multiple arguments,
-                              produces tuples.
+        :param batches: sequence of inputs to forward(). The sequence must
+                        contain tuples, even if forward() takes one
+                        argument (besides self)
         :param config: an instance of LearningConfig
         """
 
@@ -74,7 +74,7 @@ class LabelModel(nn.Module):
 
             # Iterates over training data
             i_batch = 0
-            for i_batch, inputs in enumerate(input_batcher):
+            for i_batch, inputs in enumerate(batches):
                 optimizer.zero_grad()
                 log_likelihood = self(*inputs)
                 loss = -1 * torch.mean(log_likelihood)

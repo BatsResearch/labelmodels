@@ -138,9 +138,9 @@ class NaiveBayes(LabelModel):
         votes = votes[index, :]
 
         # Creates minibatches
-        batches = [sparse.coo_matrix(
+        batches = [(sparse.coo_matrix(
             votes[i * config.batch_size: (i+1) * config.batch_size, :],
-            copy=True)
+            copy=True),)
             for i in range(int(np.ceil(votes.shape[0] / config.batch_size)))
         ]
 

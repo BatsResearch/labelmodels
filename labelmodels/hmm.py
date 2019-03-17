@@ -54,9 +54,9 @@ class HMM(LabelModel):
         self.acc_prior = acc_prior
 
     def observation_likelihood(self, votes):
-
         """
-        Computes log likelihood of joint log-likelihood of class and votes as an m x k matrix
+        Computes conditional log-likelihood of votes given class as an
+        m x k matrix.
 
         For efficiency, this function prefers that votes is an instance of
         scipy.sparse.coo_matrix. You can avoid a conversion by passing in votes
@@ -65,8 +65,8 @@ class HMM(LabelModel):
         :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
                       lengths of the sequences in the batch, n is the number of
                       labeling functions and k is the number of classes
-        :return: matrix of dimension m x k, where element is the joint 
-                 log-likelihood of class and votes
+        :return: matrix of dimension m x k, where element is the conditional
+                 log-likelihood of votes given class
         """
         if type(votes) != sparse.coo_matrix:
             votes = sparse.coo_matrix(votes)
@@ -99,7 +99,6 @@ class HMM(LabelModel):
         return jll
 
     def forward(self, votes, seq_starts):
-
         """
         Computes log likelihood of sequence of labeling function outputs for
         each (sequence) example in batch.
@@ -121,20 +120,20 @@ class HMM(LabelModel):
         """
 
         jll = self.observation_likelihood(votes)
-        # normalize transition matrix
+        # Normalize transition matrix
         nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim = 1)
         nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim = 0)
         for i in range(0, votes.shape[0]):
             if i in seq_starts:
                 jll[i, :] = jll[i, :] + nor_start_balance
-            else:              
-                jll[i, :] = jll[i, :]+torch.logsumexp(jll[i-1, :].clone().unsqueeze(1).repeat(
-                    1, self.num_classes) + nor_transitions, dim = 0) 
-        seq_ends = [x - 1 for x in seq_starts]+ [votes.shape[0]-1]
+            else:
+                joint_class_pair = jll[i-1, :].clone().unsqueeze(1).repeat(1, self.num_classes) + nor_transitions
+                marginal_current_class = torch.logsumexp(joint_class_pair, dim=0)
+                jll[i, :] = jll[i, :] + marginal_current_class
+        seq_ends = [x - 1 for x in seq_starts] + [votes.shape[0]-1]
         seq_ends.remove(-1)
-        mll = torch.logsumexp(jll[seq_ends], dim = 1)
+        mll = torch.logsumexp(jll[seq_ends], dim=1)
         return mll
-
 
     def viterbi(self, votes, seq_starts):
         """
@@ -225,7 +224,8 @@ class HMM(LabelModel):
             seq_starts[i * config.batch_size: ((i + 1) * config.batch_size + 1)],
             copy=True)
             for i in range(int(np.ceil(len(seq_starts) / config.batch_size)))
-       ]
+        ]
+        seq_start_batches[-1] = np.concatenate((seq_start_batches[-1], [votes.shape[0]]))
 
         vote_batches = []
         for seq_start_batch in seq_start_batches:
