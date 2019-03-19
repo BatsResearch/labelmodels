@@ -23,10 +23,10 @@ class TestHMM(unittest.TestCase):
         transitions = np.array([[.5, .5], [.1, .9]])
 
         labels_train, seq_starts_train, gold_train = _generate_data(
-            100, 8, 12, n, accuracies, propensities, start_balance, transitions
+            1000, 8, 12, n, accuracies, propensities, start_balance, transitions
         )
 
-        model = HMM(k, n, learn_start_balance=True)
+        model = HMM(k, n, learn_start_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train, seq_starts_train)
 
         for i in range(n):

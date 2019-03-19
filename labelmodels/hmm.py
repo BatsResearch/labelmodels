@@ -118,11 +118,10 @@ class HMM(LabelModel):
         :return: vector of length l, where element is the log-likelihood of the
                  corresponding sequence of outputs in votes
         """
-
         jll = self.observation_likelihood(votes)
         # Normalize transition matrix
-        nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim = 1)
-        nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim = 0)
+        nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
+        nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
         for i in range(0, votes.shape[0]):
             if i in seq_starts:
                 jll[i, :] = jll[i, :] + nor_start_balance
@@ -179,7 +178,6 @@ class HMM(LabelModel):
         res = [x + 1 for x in res] 
         res.reverse()
         return res
-
               
     def _get_regularization_loss(self):
         """Computes the regularization loss of the model:
@@ -286,7 +284,7 @@ class HMM(LabelModel):
         :return: a k x k Numpy matrix, in which each element i, j is the
         probability p(c_{t+1} = j + 1 | c_{t} = i + 1)
         """
-        transitions = self.transitions.detach().numpy()
+        transitions = np.copy(self.transitions.detach().numpy())
         for i in range(transitions.shape[0]):
             transitions[i] = np.exp(transitions[i] - np.max(transitions[i]))
             transitions[i] = transitions[i] / transitions[i].sum()
