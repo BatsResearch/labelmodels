@@ -43,6 +43,30 @@ class TestHMM(unittest.TestCase):
                 diff = transitions[i, j] - model.get_transition_matrix()[i, j]
                 self.assertAlmostEqual(diff, 0.0, places=1)
 
+    def test_viterbi(self):
+        n = 5
+        k = 2
+
+        accuracies = np.array([.8] * n)
+        propensities = np.array([.5] * n)
+        start_balance = np.array([.1, .9])
+        transitions = np.array([[.5, .5], [.1, .9]])
+
+        labels_train, seq_starts_train, gold_train = _generate_data(
+            1000, 8, 12, n, accuracies, propensities, start_balance, transitions
+        )
+
+        model = HMM(k, n, learn_start_balance=True, acc_prior=0.0)
+        model.estimate_label_model(labels_train, seq_starts_train)
+
+        predictions = model.viterbi(labels_train, seq_starts_train)
+        correct = 0
+        for i in range(len(predictions)):
+            if predictions[i] == gold_train[i]:
+                correct += 1
+        accuracy = correct / float(len(predictions))
+        self.assertGreaterEqual(accuracy, .90)
+
 
 def _generate_data(num_seqs, min_seq, max_seq, num_lfs, accuracies,
                    propensities, start_balance, transitions):

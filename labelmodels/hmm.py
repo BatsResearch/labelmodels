@@ -150,8 +150,8 @@ class HMM(LabelModel):
         """
 
         jll = self.observation_likelihood(votes)
-        nor_transitions = self.transitions - torch.logsumexp(self.transitions, 1)
-        nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, 0)
+        nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
+        nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
 
         T = votes.shape[0]
         bt = torch.zeros([T, self.num_classes])
@@ -161,10 +161,10 @@ class HMM(LabelModel):
             else: 
                 p = jll[i-1, :].clone().unsqueeze(1).repeat(
                     1, self.num_classes) + nor_transitions
-                jll[i, :] += torch.max(p, dim = 0)[0]
-                bt[i, :] = torch.argmax(p, dim = 0)
+                jll[i, :] += torch.max(p, dim=0)[0]
+                bt[i, :] = torch.argmax(p, dim=0)
 
-        seq_ends = [x - 1 for x in seq_starts] + [len(votes)-1]
+        seq_ends = [x - 1 for x in seq_starts] + [votes.shape[0] - 1]
         res = []
         j = T-1
         while j >= 0:
