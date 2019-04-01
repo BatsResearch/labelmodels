@@ -21,6 +21,8 @@ before_install:
 
 install:
   - pip install -q .
+  - export PYTHONPATH=".:$PYTHONPATH"
 
 script:
   - python test/test_naive_bayes.py
+  - python test/test_hmm.py
