@@ -168,7 +168,11 @@ class NaiveBayes(LabelModel):
             for j in range(self.num_lfs):
                 vote = votes[i, j]
                 if vote != 0:
-                    temp[vote - 1] += log_acc[j]
+                    for class_label in range(self.num_classes):
+                        if vote == class_label + 1:
+                            temp[class_label] += log_acc[j]
+                        else:
+                            temp[class_label] -= log_acc[j]
 
             # Softmax
             e_temp = np.exp(temp - np.max(temp))

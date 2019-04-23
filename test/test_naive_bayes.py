@@ -107,7 +107,7 @@ class TestNaiveBayes(unittest.TestCase):
             if gold_train[i] == np.argmax(labels[i, :]) + 1:
                 correct += 1
 
-        self.assertGreater(float(correct) / m, .925)
+        self.assertGreater(float(correct) / m, .95)
 
     def test_get_label_distribution_multiclass(self):
         m = 10000
@@ -138,7 +138,7 @@ class TestNaiveBayes(unittest.TestCase):
             if gold_train[i] == np.argmax(labels[i, :]) + 1:
                 correct += 1
 
-        self.assertGreater(float(correct) / m, .85)
+        self.assertGreater(float(correct) / m, .95)
 
     def test_estimate_model_input_formats(self):
         m = 1000
