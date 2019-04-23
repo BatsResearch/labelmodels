@@ -15,48 +15,75 @@ class TestNaiveBayes(unittest.TestCase):
 
     def test_estimate_label_model_binary(self):
         m = 10000
-        n = 10
-        accuracies = np.array([.9, .9, .9, .8, .8, .8, .7, .7, .7, .4])
+        n = 5
+        accuracies = np.array([[.9, .8],
+                               [.6, .7],
+                               [.5, .5],
+                               [.7, .6],
+                               [.8, .8]])
         propensities = np.array([.15] * n)
-        class_balance = np.array([.1, .9])
+        class_balance = np.array([.3, .7])
 
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = NaiveBayes(2, n, learn_class_balance=True, acc_prior=0.0)
+        count1 = 0
+        count2 = 0
+        for label in gold_train:
+            if label == 1:
+                count1 += 1
+            elif label == 2:
+                count2 += 1
+
+        print(count1)
+        print(count2)
+
+        model = NaiveBayes(
+            2, n, learn_class_balance=True, acc_prior=0.0, entropy_prior=0.0)
         model.estimate_label_model(labels_train)
 
-        for i in range(n):
-            diff = accuracies[i] - model.get_accuracies()[i]
+        print(model.get_class_balance())
+        print(model.get_propensities())
+        print(model.get_accuracies())
+
+        for j in range(n):
+            for k in range(2):
+                diff = accuracies[j, k] - model.get_accuracies()[j, k]
+                self.assertAlmostEqual(diff, 0.0, places=1)
+        for j in range(n):
+            diff = propensities[j] - model.get_propensities()[j]
             self.assertAlmostEqual(diff, 0.0, places=1)
-        for i in range(n):
-            diff = propensities[i] - model.get_propensities()[i]
-            self.assertAlmostEqual(diff, 0.0, places=1)
-        for i in range(len(class_balance)):
-            diff = class_balance[i] - model.get_class_balance()[i]
+        for k in range(len(class_balance)):
+            diff = class_balance[k] - model.get_class_balance()[k]
             self.assertAlmostEqual(diff, 0.0, places=1)
 
     def test_estimate_label_model_multiclass(self):
-        m = 10000
-        n = 10
-        accuracies = np.array([.9, .9, .9, .8, .8, .8, .7, .7, .7, .4])
-        propensities = np.array([.15] * n)
-        class_balance = np.array([.1, .1, .2, .2, .4])
+        m = 25000
+        n = 5
+        accuracies = np.array([[.9, .8, .5],
+                               [.6, .7, .5],
+                               [.5, .5, .9],
+                               [.7, .6, .7],
+                               [.8, .8, .7]])
+        propensities = np.array([.2] * n)
+        class_balance = np.array([.3, .4, .3])
 
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = NaiveBayes(5, n, learn_class_balance=True, acc_prior=0.0)
+        model = NaiveBayes(
+            3, n, learn_class_balance=True, acc_prior=0.0, entropy_prior=0.0)
         model.estimate_label_model(labels_train)
 
-        for i in range(n):
-            diff = accuracies[i] - model.get_accuracies()[i]
+        for j in range(n):
+            for k in range(2):
+                diff = accuracies[j, k] - model.get_accuracies()[j, k]
+                self.assertAlmostEqual(diff, 0.0, places=1)
+        for j in range(n):
+            diff = propensities[j] - model.get_propensities()[j]
             self.assertAlmostEqual(diff, 0.0, places=1)
-        for i in range(n):
-            diff = propensities[i] - model.get_propensities()[i]
-            self.assertAlmostEqual(diff, 0.0, places=1)
-        for i in range(len(class_balance)):
-            diff = class_balance[i] - model.get_class_balance()[i]
+        for k in range(len(class_balance)):
+            diff = class_balance[k] - model.get_class_balance()[k]
             self.assertAlmostEqual(diff, 0.0, places=1)
 
     def test_estimate_label_model_strong_prior(self):
@@ -110,26 +137,33 @@ class TestNaiveBayes(unittest.TestCase):
         self.assertGreater(float(correct) / m, .925)
 
     def test_get_label_distribution_multiclass(self):
-        m = 10000
-        n = 10
-
-        accuracies = np.array([.8] * n)
-        propensities = np.array([.5] * n)
-        class_balance = np.array([.1, .1, .8])
+        m = 25000
+        n = 5
+        accuracies = np.array([[.9, .8, .5],
+                               [.6, .7, .5],
+                               [.5, .5, .9],
+                               [.7, .6, .7],
+                               [.8, .8, .7]])
+        propensities = np.array([.2] * n)
+        class_balance = np.array([.3, .4, .3])
 
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = NaiveBayes(3, n, init_lf_acc=.8)
-        model.class_balance[0] = -1.08
-        model.class_balance[1] = -1.08
-        model.class_balance[2] = 1
+        model = NaiveBayes(
+            3, n, learn_class_balance=True, acc_prior=0.0, entropy_prior=0.0)
+        model.estimate_label_model(labels_train)
 
-        # First checks that accuracies were initialized correctly
-        diff = np.sum(np.abs(accuracies - model.get_accuracies()))
-        self.assertAlmostEqual(diff, 0.0, places=3)
-        diff = np.sum(np.abs(class_balance - model.get_class_balance()))
-        self.assertAlmostEqual(diff, 0.0, places=3)
+        for j in range(n):
+            for k in range(2):
+                diff = accuracies[j, k] - model.get_accuracies()[j, k]
+                self.assertAlmostEqual(diff, 0.0, places=1)
+        for j in range(n):
+            diff = propensities[j] - model.get_propensities()[j]
+            self.assertAlmostEqual(diff, 0.0, places=1)
+        for k in range(len(class_balance)):
+            diff = class_balance[k] - model.get_class_balance()[k]
+            self.assertAlmostEqual(diff, 0.0, places=1)
 
         # Checks label inference
         labels = model.get_label_distribution(labels_train)
@@ -199,12 +233,13 @@ def _generate_data(m, n, accuracies, propensities, class_balance):
     val = []
 
     for i in range(m):
-        gold[i] = np.argmax(np.random.multinomial(1, class_balance)) + 1
+        k = np.argmax(np.random.multinomial(1, class_balance))
+        gold[i] = k + 1
         for j in range(n):
             if np.random.random() < propensities[j]:
                 row.append(i)
                 col.append(j)
-                if np.random.random() < accuracies[j]:
+                if np.random.random() < accuracies[j, k]:
                     val.append(gold[i])
                 else:
                     p_mistake = 1 / (len(class_balance) - 1)
