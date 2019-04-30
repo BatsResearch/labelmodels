@@ -17,7 +17,7 @@ class HMM(LabelModel):
     for Computational Linguistics, 2017.
     """
 
-    def __init__(self, num_classes, num_lfs, init_lf_acc=.6, acc_prior=.01,
+    def __init__(self, num_classes, num_lfs, init_lf_acc=.9, acc_prior=.025,
                  learn_start_balance=False):
         """Constructor.
 
@@ -41,7 +41,9 @@ class HMM(LabelModel):
         init_lf_acc = -1 * np.log(1.0 / init_lf_acc - 1) / 2
 
         # Initializes parameters
-        self.lf_accuracy = nn.Parameter(torch.tensor([init_lf_acc] * num_lfs))
+        init_param = torch.tensor(
+            [[init_lf_acc] * num_classes for _ in range(num_lfs)])
+        self.lf_accuracy = nn.Parameter(init_param)
         self.lf_propensity = nn.Parameter(torch.zeros([num_lfs]))
         self.start_balance = nn.Parameter(torch.zeros([num_classes]),
                                           requires_grad=learn_start_balance)
@@ -71,32 +73,34 @@ class HMM(LabelModel):
         if type(votes) != sparse.coo_matrix:
             votes = sparse.coo_matrix(votes)
 
-        # Initializes joint log-likelihood of class and votes as an m x k matrix
-        jll = torch.zeros([votes.shape[0], self.num_classes])
+        # Initializes joint log-likelihood of votes as an m x k matrix
+        cll = torch.zeros(votes.shape[0], self.num_classes)
 
-        # Initializes repeatedly used values
-        prop_plus_acc = self.lf_propensity + self.lf_accuracy
-        prop_minus_acc = self.lf_propensity - self.lf_accuracy
-        prop_minus_acc_scaled = prop_minus_acc - \
-                                torch.log(torch.tensor(self.num_classes - 1.0))
+        # Initializes normalizing constants
+        z_prop = self.lf_propensity.unsqueeze(1)
+        z_prop = torch.cat((z_prop, torch.zeros((self.num_lfs, 1))), dim=1)
+        z_prop = torch.logsumexp(z_prop, dim=1)
 
-        # Computes conditional log-likelihood normalizing constants and
-        # subtracts them from joint log-likelihoods
-        z = torch.cat((prop_plus_acc.unsqueeze(0),
-                       prop_minus_acc.unsqueeze(0),
-                       torch.zeros((1, self.num_lfs))), dim=0)
-        z = torch.logsumexp(z, dim=0)
-        jll -= torch.sum(z)
+        z_acc = self.lf_accuracy.unsqueeze(2)
+        z_acc = torch.cat((z_acc, -1 * self.lf_accuracy.unsqueeze(2)), dim=2)
+        z_acc = torch.logsumexp(z_acc, dim=2)
+
+        # Subtracts normalizing constant for propensities from cll
+        # (since it applies to all outcomes)
+        cll -= torch.sum(z_prop)
 
         # Loops over votes and classes to compute joint log-likelihood
         for i, j, v in zip(votes.row, votes.col, votes.data):
             for k in range(self.num_classes):
                 if v == (k + 1):
-                    jll[i, k] += prop_plus_acc[j]
-                else:
-                    jll[i, k] += prop_minus_acc_scaled[j]
+                    logp = self.lf_propensity[j] + self.lf_accuracy[j, k] - z_acc[j, k]
+                    cll[i, k] += logp
+                elif v != 0:
+                    logp = self.lf_propensity[j] - self.lf_accuracy[j, k] - z_acc[j, k]
+                    logp -= torch.log(torch.tensor(self.num_classes - 1.0))
+                    cll[i, k] += logp
 
-        return jll
+        return cll
 
     def forward(self, votes, seq_starts):
         """
@@ -259,11 +263,8 @@ class HMM(LabelModel):
                  function, representing the estimated probability that
                  the corresponding labeling function does not abstain
         """
-        accuracies = self.lf_accuracy.detach().numpy()
-        propensities = self.lf_propensity.detach().numpy()
-        score = np.exp(propensities + accuracies) \
-                + np.exp(propensities - accuracies)
-        return score / (score + 1)
+        prop = self.lf_propensity.detach().numpy()
+        return np.exp(prop) / (np.exp(prop) + 1)
 
     def get_start_balance(self):
         """Returns the model's estimated class balance for the start of a

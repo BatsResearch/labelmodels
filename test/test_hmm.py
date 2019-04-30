@@ -1,7 +1,6 @@
 from labelmodels import HMM
 import numpy as np
 from scipy import sparse
-import test.util as util
 import unittest
 
 
@@ -14,24 +13,34 @@ class TestHMM(unittest.TestCase):
         pass
 
     def test_estimate_label_model_binary(self):
-        n = 5
+        n = 10
         k = 2
 
-        accuracies = np.array([.8] * n)
-        propensities = np.array([.5] * n)
-        start_balance = np.array([.1, .9])
-        transitions = np.array([[.5, .5], [.1, .9]])
+        accuracies = np.array([[.9, .8],
+                               [.6, .7],
+                               [.5, .5],
+                               [.7, .6],
+                               [.8, .8],
+                               [.9, .8],
+                               [.6, .7],
+                               [.5, .5],
+                               [.7, .6],
+                               [.8, .8]])
+        propensities = np.array([.6] * n)
+        start_balance = np.array([.2, .8])
+        transitions = np.array([[.5, .5], [.2, .8]])
 
         labels_train, seq_starts_train, gold_train = _generate_data(
-            1000, 8, 12, n, accuracies, propensities, start_balance, transitions
+            2000, 8, 12, n, accuracies, propensities, start_balance, transitions
         )
 
         model = HMM(k, n, learn_start_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train, seq_starts_train)
 
         for i in range(n):
-            diff = accuracies[i] - model.get_accuracies()[i]
-            self.assertAlmostEqual(diff, 0.0, places=1)
+            for j in range(k):
+                diff = accuracies[i, j] - model.get_accuracies()[i, j]
+                self.assertAlmostEqual(diff, 0.0, places=1)
         for i in range(n):
             diff = propensities[i] - model.get_propensities()[i]
             self.assertAlmostEqual(diff, 0.0, places=1)
@@ -44,20 +53,44 @@ class TestHMM(unittest.TestCase):
                 self.assertAlmostEqual(diff, 0.0, places=1)
 
     def test_viterbi(self):
-        n = 5
+        n = 10
         k = 2
 
-        accuracies = np.array([.8] * n)
-        propensities = np.array([.5] * n)
-        start_balance = np.array([.1, .9])
-        transitions = np.array([[.5, .5], [.1, .9]])
+        accuracies = np.array([[.9, .8],
+                               [.6, .7],
+                               [.5, .5],
+                               [.7, .6],
+                               [.8, .8],
+                               [.9, .8],
+                               [.6, .7],
+                               [.5, .5],
+                               [.7, .6],
+                               [.8, .8]])
+        propensities = np.array([.6] * n)
+        start_balance = np.array([.2, .8])
+        transitions = np.array([[.5, .5], [.2, .8]])
 
         labels_train, seq_starts_train, gold_train = _generate_data(
-            1000, 8, 12, n, accuracies, propensities, start_balance, transitions
+            500, 8, 12, n, accuracies, propensities, start_balance, transitions
         )
 
         model = HMM(k, n, learn_start_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train, seq_starts_train)
+
+        for i in range(n):
+            for j in range(k):
+                diff = accuracies[i, j] - model.get_accuracies()[i, j]
+                self.assertLess(np.abs(diff), 0.1)
+        for i in range(n):
+            diff = propensities[i] - model.get_propensities()[i]
+            self.assertLess(np.abs(diff), 0.1)
+        for i in range(k):
+            diff = start_balance[i] - model.get_start_balance()[i]
+            self.assertLess(np.abs(diff), 0.1)
+        for i in range(k):
+            for j in range(k):
+                diff = transitions[i, j] - model.get_transition_matrix()[i, j]
+                self.assertLess(np.abs(diff), 0.1)
 
         predictions = model.viterbi(labels_train, seq_starts_train)
         correct = 0
@@ -65,7 +98,7 @@ class TestHMM(unittest.TestCase):
             if predictions[i] == gold_train[i]:
                 correct += 1
         accuracy = correct / float(len(predictions))
-        self.assertGreaterEqual(accuracy, .90)
+        self.assertGreaterEqual(accuracy, .80)
 
 
 def _generate_data(num_seqs, min_seq, max_seq, num_lfs, accuracies,
@@ -100,7 +133,7 @@ def _generate_data(num_seqs, min_seq, max_seq, num_lfs, accuracies,
             if np.random.random() < propensities[j]:
                 row.append(i)
                 col.append(j)
-                if np.random.random() < accuracies[j]:
+                if np.random.random() < accuracies[j, gold[i] - 1]:
                     val.append(gold[i])
                 else:
                     p_mistake = 1 / (len(start_balance) - 1)

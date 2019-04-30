@@ -19,8 +19,8 @@ class NaiveBayes(LabelModel):
     Neural Information Processing Systems, 2016.
     """
 
-    def __init__(self, num_classes, num_lfs, init_lf_acc=.75, acc_prior=.1,
-                 entropy_prior=0.01, learn_class_balance=True):
+    def __init__(self, num_classes, num_lfs, init_lf_acc=.9, acc_prior=0.025,
+                 entropy_prior=0.0, learn_class_balance=True):
         """Constructor.
 
         Initializes labeling function accuracies using optional argument and all
