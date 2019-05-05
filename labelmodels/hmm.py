@@ -17,8 +17,7 @@ class HMM(LabelModel):
     for Computational Linguistics, 2017.
     """
 
-    def __init__(self, num_classes, num_lfs, init_lf_acc=.9, acc_prior=.025,
-                 learn_start_balance=False):
+    def __init__(self, num_classes, num_lfs, init_lf_acc=.9, acc_prior=.025):
         """Constructor.
 
         Initializes labeling function accuracies using optional argument and all
@@ -45,8 +44,7 @@ class HMM(LabelModel):
             [[init_lf_acc] * num_classes for _ in range(num_lfs)])
         self.lf_accuracy = nn.Parameter(init_param)
         self.lf_propensity = nn.Parameter(torch.zeros([num_lfs]))
-        self.start_balance = nn.Parameter(torch.zeros([num_classes]),
-                                          requires_grad=learn_start_balance)
+        self.start_balance = nn.Parameter(torch.zeros([num_classes]))
         self.transitions = nn.Parameter(torch.zeros([num_classes, num_classes]))
 
         # Saves state
