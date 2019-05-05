@@ -32,7 +32,7 @@ class TestNaiveBayes(unittest.TestCase):
             m, n, accuracies, propensities, class_balance)
 
         model = NaiveBayes(
-            2, n, learn_class_balance=True, acc_prior=0.0, entropy_prior=0.0)
+            2, n, learn_class_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for j in range(n):
@@ -61,7 +61,7 @@ class TestNaiveBayes(unittest.TestCase):
             m, n, accuracies, propensities, class_balance)
 
         model = NaiveBayes(
-            3, n, learn_class_balance=True, acc_prior=0.0, entropy_prior=0.0)
+            3, n, learn_class_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for j in range(n):
@@ -95,7 +95,7 @@ class TestNaiveBayes(unittest.TestCase):
             m, n, accuracies, propensities, class_balance)
 
         model = NaiveBayes(
-            2, n, learn_class_balance=True, acc_prior=0.0, entropy_prior=0.0)
+            2, n, learn_class_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for j in range(n):
@@ -138,7 +138,7 @@ class TestNaiveBayes(unittest.TestCase):
             m, n, accuracies, propensities, class_balance)
 
         model = NaiveBayes(
-            3, n, learn_class_balance=True, acc_prior=0.0, entropy_prior=0.0)
+            3, n, learn_class_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for j in range(n):
@@ -184,11 +184,11 @@ class TestNaiveBayes(unittest.TestCase):
             model = NaiveBayes(3, n)
             model.estimate_label_model(data)
             diff = np.sum(np.abs(accuracies - model.get_accuracies()))
-            self.assertAlmostEqual(diff, 0.0)
+            self.assertAlmostEqual(diff[0], 0.0)
             diff = np.sum(np.abs(propensities - model.get_propensities()))
-            self.assertAlmostEqual(diff, 0.0)
+            self.assertAlmostEqual(diff[0], 0.0)
             diff = np.sum(np.abs(class_balance - model.get_class_balance()))
-            self.assertAlmostEqual(diff, 0.0)
+            self.assertAlmostEqual(diff[0], 0.0)
 
     def test_get_label_input_formats(self):
         m = 1000
@@ -210,7 +210,7 @@ class TestNaiveBayes(unittest.TestCase):
             model = NaiveBayes(3, n, init_lf_acc=0.8)
             new_distribution = model.get_label_distribution(data)
             diff = np.sum(np.abs(distribution - new_distribution))
-            self.assertAlmostEqual(diff, 0.0)
+            self.assertAlmostEqual(diff[0], 0.0)
 
 
 def _generate_data(m, n, accuracies, propensities, class_balance):

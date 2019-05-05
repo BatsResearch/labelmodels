@@ -34,7 +34,7 @@ class TestHMM(unittest.TestCase):
             2000, 8, 12, n, accuracies, propensities, start_balance, transitions
         )
 
-        model = HMM(k, n, learn_start_balance=True, acc_prior=0.0)
+        model = HMM(k, n, acc_prior=0.0)
         model.estimate_label_model(labels_train, seq_starts_train)
 
         for i in range(n):
@@ -74,7 +74,7 @@ class TestHMM(unittest.TestCase):
             500, 8, 12, n, accuracies, propensities, start_balance, transitions
         )
 
-        model = HMM(k, n, learn_start_balance=True, acc_prior=0.0)
+        model = HMM(k, n, acc_prior=0.0)
         model.estimate_label_model(labels_train, seq_starts_train)
 
         for i in range(n):

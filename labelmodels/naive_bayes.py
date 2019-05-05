@@ -1,11 +1,11 @@
-from .label_model import LabelModel, LearningConfig, init_random
+from .label_model import ClassConditionalLabelModel, LearningConfig, init_random
 import numpy as np
 from scipy import sparse
 import torch
 from torch import nn
 
 
-class NaiveBayes(LabelModel):
+class NaiveBayes(ClassConditionalLabelModel):
     """A generative label model that assumes that all labeling functions are
     conditionally independent given the true class label, i.e., the naive Bayes
     assumption.
@@ -20,7 +20,7 @@ class NaiveBayes(LabelModel):
     """
 
     def __init__(self, num_classes, num_lfs, init_lf_acc=.9, acc_prior=0.025,
-                 entropy_prior=0.0, learn_class_balance=True):
+                 learn_class_balance=True):
         """Constructor.
 
         Initializes labeling function accuracies using optional argument and all
@@ -37,25 +37,11 @@ class NaiveBayes(LabelModel):
                                     target classes (True) or assume to be
                                     uniform (False)
         """
-        super(LabelModel, self).__init__()
+        super(ClassConditionalLabelModel, self).__init__(
+            num_classes, num_lfs, init_lf_acc, acc_prior)
 
-        # Converts init_lf_acc to log scale
-        init_lf_acc = -1 * np.log(1.0 / init_lf_acc - 1) / 2
-
-        # Initializes parameters
-        init_param = torch.tensor(
-            [[init_lf_acc] * num_classes for _ in range(num_lfs)])
-        self.accuracy = nn.Parameter(init_param)
-        self.propensity = nn.Parameter(torch.zeros([num_lfs]))
         self.class_balance = nn.Parameter(
             torch.zeros([num_classes]), requires_grad=learn_class_balance)
-
-        # Saves state
-        self.num_classes = num_classes
-        self.num_lfs = num_lfs
-        self.init_lf_acc = init_lf_acc
-        self.acc_prior = acc_prior
-        self.entropy_prior = entropy_prior
 
     def forward(self, votes):
         """Computes log likelihood of labeling function outputs for each
@@ -71,63 +57,10 @@ class NaiveBayes(LabelModel):
         :return: 1-d tensor of length m, where each element is the
                  log-likelihood of the corresponding row in labels
         """
-        jll = self._get_observation_likelihoods(votes)
-        mll = torch.logsumexp(jll, dim=1)
-
-        return mll
-
-    def _get_observation_likelihoods(self, votes):
-        if type(votes) != sparse.coo_matrix:
-            votes = sparse.coo_matrix(votes)
-
-        # Initializes class log-likelihood as a 1-d tensor of length k
         class_ll = self._get_norm_class_balance()
-
-        # Initializes joint log-likelihood of votes and class as an m x k matrix
-        jll = class_ll.unsqueeze(0).repeat(votes.shape[0], 1)
-
-        # Initializes normalizing constants
-        z_prop = self.propensity.unsqueeze(1)
-        z_prop = torch.cat((z_prop, torch.zeros((self.num_lfs, 1))), dim=1)
-        z_prop = torch.logsumexp(z_prop, dim=1)
-
-        z_acc = self.accuracy.unsqueeze(2)
-        z_acc = torch.cat((z_acc, -1 * self.accuracy.unsqueeze(2)), dim=2)
-        z_acc = torch.logsumexp(z_acc, dim=2)
-
-        # Subtracts normalizing constant for propensities from jll
-        # (since it applies to all outcomes)
-        jll -= torch.sum(z_prop)
-
-        # Loops over votes and classes to compute joint log-likelihood
-        for i, j, v in zip(votes.row, votes.col, votes.data):
-            for k in range(self.num_classes):
-                if v == (k + 1):
-                    logp = self.propensity[j] + self.accuracy[j, k] - z_acc[j, k]
-                    jll[i, k] += logp
-                elif v != 0:
-                    logp = self.propensity[j] - self.accuracy[j, k] - z_acc[j, k]
-                    logp -= torch.log(torch.tensor(self.num_classes - 1.0))
-                    jll[i, k] += logp
-
-        return jll
-
-    def _get_regularization_loss(self):
-        """Computes the regularization loss of the model:
-        acc_prior * \|accuracy - init_lf_accuracy\|
-
-        :return: value of regularization loss
-        """
-        neg_entropy = 0.0
-        norm_class_balance = self._get_norm_class_balance()
-        exp_class_balance = torch.exp(norm_class_balance)
-        for k in range(self.num_classes):
-            neg_entropy += norm_class_balance[k] * exp_class_balance[k]
-        entropy_prior = self.entropy_prior * neg_entropy
-
-        acc_prior = self.acc_prior * torch.norm(self.accuracy - self.init_lf_acc)
-
-        return entropy_prior + acc_prior
+        conditional_ll = self._get_observation_likelihoods(votes)
+        joint_ll = conditional_ll + class_ll
+        return torch.logsumexp(joint_ll, dim=1)
 
     def _get_norm_class_balance(self):
         return self.class_balance - torch.logsumexp(self.class_balance, dim=0)
@@ -191,23 +124,3 @@ class NaiveBayes(LabelModel):
                  has that label
         """
         return np.exp(self._get_norm_class_balance().detach().numpy())
-
-    def get_accuracies(self):
-        """Returns the model's estimated labeling function accuracies
-        :return: a NumPy array with one element in [0,1] for each labeling
-                 function, representing the estimated probability that
-                 the corresponding labeling function correctly outputs
-                 the true class label, given that it does not abstain
-        """
-        acc = self.accuracy.detach().numpy()
-        return np.exp(acc) / (np.exp(acc) + np.exp(-1 * acc))
-
-    def get_propensities(self):
-        """Returns the model's estimated labeling function propensities, i.e.,
-        the probability that a labeling function does not abstain
-        :return: a NumPy array with one element in [0,1] for each labeling
-                 function, representing the estimated probability that
-                 the corresponding labeling function does not abstain
-        """
-        prop = self.propensity.detach().numpy()
-        return np.exp(prop) / (np.exp(prop) + 1)

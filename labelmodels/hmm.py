@@ -1,11 +1,11 @@
-from .label_model import LabelModel, LearningConfig, init_random
+from .label_model import ClassConditionalLabelModel, LearningConfig, init_random
 import numpy as np
 from scipy import sparse
 import torch
 from torch import nn
 
 
-class HMM(LabelModel):
+class HMM(ClassConditionalLabelModel):
     """A generative label model that treats a sequence of true class labels as a
     Markov chain, as in a hidden Markov model, and treats all labeling functions
     as conditionally independent given the corresponding true class label, as
@@ -29,76 +29,13 @@ class HMM(LabelModel):
         :param init_lf_acc: initial estimated labeling function accuracy, must
                             be a float in [0,1]
         :param acc_prior: strength of regularization of estimated labeling
-                          function accuracies toward their initial values
-        :param learn_start_balance: whether to estimate the distribution over
-                                    target classes for the start of a sequence
-                                    (True) or assume to be uniform (False)
+                          function accuracies toward their initial values]
         """
-        super(LabelModel, self).__init__()
+        super(ClassConditionalLabelModel, self).__init__(
+            num_classes, num_lfs, init_lf_acc, acc_prior)
 
-        # Converts init_lf_acc to log scale
-        init_lf_acc = -1 * np.log(1.0 / init_lf_acc - 1) / 2
-
-        # Initializes parameters
-        init_param = torch.tensor(
-            [[init_lf_acc] * num_classes for _ in range(num_lfs)])
-        self.lf_accuracy = nn.Parameter(init_param)
-        self.lf_propensity = nn.Parameter(torch.zeros([num_lfs]))
         self.start_balance = nn.Parameter(torch.zeros([num_classes]))
         self.transitions = nn.Parameter(torch.zeros([num_classes, num_classes]))
-
-        # Saves state
-        self.num_classes = num_classes
-        self.num_lfs = num_lfs
-        self.init_lf_acc = init_lf_acc
-        self.acc_prior = acc_prior
-
-    def observation_likelihood(self, votes):
-        """
-        Computes conditional log-likelihood of votes given class as an
-        m x k matrix.
-
-        For efficiency, this function prefers that votes is an instance of
-        scipy.sparse.coo_matrix. You can avoid a conversion by passing in votes
-        with this class.
-
-        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
-                      lengths of the sequences in the batch, n is the number of
-                      labeling functions and k is the number of classes
-        :return: matrix of dimension m x k, where element is the conditional
-                 log-likelihood of votes given class
-        """
-        if type(votes) != sparse.coo_matrix:
-            votes = sparse.coo_matrix(votes)
-
-        # Initializes joint log-likelihood of votes as an m x k matrix
-        cll = torch.zeros(votes.shape[0], self.num_classes)
-
-        # Initializes normalizing constants
-        z_prop = self.lf_propensity.unsqueeze(1)
-        z_prop = torch.cat((z_prop, torch.zeros((self.num_lfs, 1))), dim=1)
-        z_prop = torch.logsumexp(z_prop, dim=1)
-
-        z_acc = self.lf_accuracy.unsqueeze(2)
-        z_acc = torch.cat((z_acc, -1 * self.lf_accuracy.unsqueeze(2)), dim=2)
-        z_acc = torch.logsumexp(z_acc, dim=2)
-
-        # Subtracts normalizing constant for propensities from cll
-        # (since it applies to all outcomes)
-        cll -= torch.sum(z_prop)
-
-        # Loops over votes and classes to compute joint log-likelihood
-        for i, j, v in zip(votes.row, votes.col, votes.data):
-            for k in range(self.num_classes):
-                if v == (k + 1):
-                    logp = self.lf_propensity[j] + self.lf_accuracy[j, k] - z_acc[j, k]
-                    cll[i, k] += logp
-                elif v != 0:
-                    logp = self.lf_propensity[j] - self.lf_accuracy[j, k] - z_acc[j, k]
-                    logp -= torch.log(torch.tensor(self.num_classes - 1.0))
-                    cll[i, k] += logp
-
-        return cll
 
     def forward(self, votes, seq_starts):
         """
@@ -120,7 +57,7 @@ class HMM(LabelModel):
         :return: vector of length l, where element is the log-likelihood of the
                  corresponding sequence of outputs in votes
         """
-        jll = self.observation_likelihood(votes)
+        jll = self._get_observation_likelihoods(votes)
         # Normalize transition matrix
         nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
         nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
@@ -151,7 +88,7 @@ class HMM(LabelModel):
         :return: vector of length m, where element is the most likely predicted labels
         """
 
-        jll = self.observation_likelihood(votes)
+        jll = self._get_observation_likelihoods(votes)
         nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
         nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
 
@@ -180,14 +117,6 @@ class HMM(LabelModel):
         res = [x + 1 for x in res] 
         res.reverse()
         return res
-              
-    def _get_regularization_loss(self):
-        """Computes the regularization loss of the model:
-        acc_prior * |lf_accuracy - init_lf_accuracy|
-
-        :return: value of regularization loss
-        """
-        return self.acc_prior * torch.norm(self.lf_accuracy - self.init_lf_acc)
 
     def estimate_label_model(self, votes, seq_starts, config=None):
         """Estimates the parameters of the label model based on observed
@@ -242,27 +171,6 @@ class HMM(LabelModel):
 
     def get_label_distribution(self, votes, seq_starts):
         raise NotImplementedError
-
-    def get_accuracies(self):
-        """Returns the model's estimated labeling function accuracies
-
-        :return: a NumPy array with one element in [0,1] for each labeling
-                 function, representing the estimated probability that
-                 the corresponding labeling function correctly outputs
-                 the true class label, given that it does not abstain
-        """
-        return 1 / (1 + np.exp(-2 * self.lf_accuracy.detach().numpy()))
-
-    def get_propensities(self):
-        """Returns the model's estimated labeling function propensities, i.e.,
-        the probability that a labeling function does not abstain
-
-        :return: a NumPy array with one element in [0,1] for each labeling
-                 function, representing the estimated probability that
-                 the corresponding labeling function does not abstain
-        """
-        prop = self.lf_propensity.detach().numpy()
-        return np.exp(prop) / (np.exp(prop) + 1)
 
     def get_start_balance(self):
         """Returns the model's estimated class balance for the start of a
