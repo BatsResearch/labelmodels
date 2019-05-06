@@ -17,7 +17,7 @@ class HMM(ClassConditionalLabelModel):
     for Computational Linguistics, 2017.
     """
 
-    def __init__(self, num_classes, num_lfs, init_lf_acc=.9, acc_prior=.025):
+    def __init__(self, num_classes, num_lfs, init_acc=.9, acc_prior=.025):
         """Constructor.
 
         Initializes labeling function accuracies using optional argument and all
@@ -26,13 +26,13 @@ class HMM(ClassConditionalLabelModel):
         :param num_classes: number of target classes, i.e., binary
                             classification = 2
         :param num_lfs: number of labeling functions to model
-        :param init_lf_acc: initial estimated labeling function accuracy, must
+        :param init_acc: initial estimated labeling function accuracy, must
                             be a float in [0,1]
         :param acc_prior: strength of regularization of estimated labeling
                           function accuracies toward their initial values]
         """
         super(ClassConditionalLabelModel, self).__init__(
-            num_classes, num_lfs, init_lf_acc, acc_prior)
+            num_classes, num_lfs, init_acc, acc_prior)
 
         self.start_balance = nn.Parameter(torch.zeros([num_classes]))
         self.transitions = nn.Parameter(torch.zeros([num_classes, num_classes]))
@@ -57,7 +57,7 @@ class HMM(ClassConditionalLabelModel):
         :return: vector of length l, where element is the log-likelihood of the
                  corresponding sequence of outputs in votes
         """
-        jll = self._get_observation_likelihoods(votes)
+        jll = self._get_labeling_function_likelihoods(votes)
         # Normalize transition matrix
         nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
         nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
@@ -88,7 +88,7 @@ class HMM(ClassConditionalLabelModel):
         :return: vector of length m, where element is the most likely predicted labels
         """
 
-        jll = self._get_observation_likelihoods(votes)
+        jll = self._get_labeling_function_likelihoods(votes)
         nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
         nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
 

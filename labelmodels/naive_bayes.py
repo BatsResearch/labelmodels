@@ -19,7 +19,7 @@ class NaiveBayes(ClassConditionalLabelModel):
     Neural Information Processing Systems, 2016.
     """
 
-    def __init__(self, num_classes, num_lfs, init_lf_acc=.9, acc_prior=0.025,
+    def __init__(self, num_classes, num_lfs, init_acc=.9, acc_prior=0.025,
                  learn_class_balance=True):
         """Constructor.
 
@@ -29,7 +29,7 @@ class NaiveBayes(ClassConditionalLabelModel):
         :param num_classes: number of target classes, i.e., binary
                             classification = 2
         :param num_lfs: number of labeling functions to model
-        :param init_lf_acc: initial estimated labeling function accuracy, must
+        :param init_acc: initial estimated labeling function accuracy, must
                             be a float in [0,1]
         :param acc_prior: strength of regularization of estimated labeling
                           function accuracies toward their initial values
@@ -37,8 +37,7 @@ class NaiveBayes(ClassConditionalLabelModel):
                                     target classes (True) or assume to be
                                     uniform (False)
         """
-        super(ClassConditionalLabelModel, self).__init__(
-            num_classes, num_lfs, init_lf_acc, acc_prior)
+        super().__init__(num_classes, num_lfs, init_acc, acc_prior)
 
         self.class_balance = nn.Parameter(
             torch.zeros([num_classes]), requires_grad=learn_class_balance)
@@ -58,7 +57,7 @@ class NaiveBayes(ClassConditionalLabelModel):
                  log-likelihood of the corresponding row in labels
         """
         class_ll = self._get_norm_class_balance()
-        conditional_ll = self._get_observation_likelihoods(votes)
+        conditional_ll = self._get_labeling_function_likelihoods(votes)
         joint_ll = conditional_ll + class_ll
         return torch.logsumexp(joint_ll, dim=1)
 
@@ -78,24 +77,12 @@ class NaiveBayes(ClassConditionalLabelModel):
         if config is None:
             config = LearningConfig()
 
-        # Initializes random seed
-        init_random(config.random_seed)
-
         # Converts to CSR to standardize input
         votes = sparse.csr_matrix(votes, dtype=np.int)
 
-        # Shuffles rows
-        index = np.arange(np.shape(votes)[0])
-        np.random.shuffle(index)
-        votes = votes[index, :]
-
-        # Creates minibatches
-        batches = [(sparse.coo_matrix(
-            votes[i * config.batch_size: (i + 1) * config.batch_size, :],
-            copy=True),)
-            for i in range(int(np.ceil(votes.shape[0] / config.batch_size)))
-        ]
-
+        init_random(config.random_seed)
+        batches = self._create_minibatches(votes, config.batch_size,
+                                           shuffle_rows=True)
         self._do_estimate_label_model(batches, config)
 
     def get_label_distribution(self, votes):
@@ -108,11 +95,23 @@ class NaiveBayes(ClassConditionalLabelModel):
         :return: m x k matrix, where each row is the posterior distribution over
                  the true class label for the corresponding example
         """
+        # Converts to CSR to standardize input
+        votes = sparse.csr_matrix(votes, dtype=np.int)
+
         labels = np.ndarray((votes.shape[0], self.num_classes))
-        jll = self._get_observation_likelihoods(votes).detach().numpy()
-        for i in range(votes.shape[0]):
-            e_temp = np.exp(jll[i, :] - np.max(jll[i, :]))
-            labels[i, :] = e_temp / e_temp.sum()
+        batches = self._create_minibatches(votes, 4096, shuffle_rows=False)
+
+        offset = 0
+        for votes, in batches:
+            class_balance = self._get_norm_class_balance()
+            lf_likelihood = self._get_labeling_function_likelihoods(votes)
+            jll = class_balance + lf_likelihood
+            for i in range(votes.shape[0]):
+                p = torch.exp(jll[i, :] - torch.max(jll[i, :]))
+                p = p / p.sum()
+                for j in range(self.num_classes):
+                    labels[offset + i, j] = p[j]
+            offset += votes.shape[0]
 
         return labels
 
@@ -124,3 +123,18 @@ class NaiveBayes(ClassConditionalLabelModel):
                  has that label
         """
         return np.exp(self._get_norm_class_balance().detach().numpy())
+
+    def _create_minibatches(self, votes, batch_size, shuffle_rows=False):
+        if shuffle_rows:
+            index = np.arange(np.shape(votes)[0])
+            np.random.shuffle(index)
+            votes = votes[index, :]
+
+        # Creates minibatches
+        batches = [(sparse.coo_matrix(
+            votes[i * batch_size: (i + 1) * batch_size, :],
+            copy=True),)
+            for i in range(int(np.ceil(votes.shape[0] / batch_size)))
+        ]
+
+        return batches

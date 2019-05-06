@@ -1,6 +1,7 @@
 from labelmodels import NaiveBayes
 import numpy as np
 from scipy import sparse
+import test.util as util
 import unittest
 
 
@@ -76,7 +77,7 @@ class TestNaiveBayes(unittest.TestCase):
             self.assertAlmostEqual(diff, 0.0, places=1)
 
     def test_get_label_distribution_binary(self):
-        m = 20000
+        m = 10000
         n = 10
         accuracies = np.array([[.9, .8],
                                [.6, .7],
@@ -88,7 +89,7 @@ class TestNaiveBayes(unittest.TestCase):
                                [.5, .5],
                                [.7, .6],
                                [.8, .8]])
-        propensities = np.array([.25] * n)
+        propensities = np.array([.5] * n)
         class_balance = np.array([.3, .7])
 
         labels_train, gold_train = _generate_data(
@@ -116,10 +117,10 @@ class TestNaiveBayes(unittest.TestCase):
             if gold_train[i] == np.argmax(labels[i, :]) + 1:
                 correct += 1
 
-        self.assertGreater(float(correct) / m, .80)
+        self.assertGreater(float(correct) / m, .85)
 
     def test_get_label_distribution_multiclass(self):
-        m = 25000
+        m = 10000
         n = 10
         accuracies = np.array([[.9, .8, .5],
                                [.6, .7, .5],
@@ -131,7 +132,7 @@ class TestNaiveBayes(unittest.TestCase):
                                [.5, .5, .9],
                                [.7, .6, .7],
                                [.8, .8, .7]])
-        propensities = np.array([.25] * n)
+        propensities = np.array([.5] * n)
         class_balance = np.array([.3, .4, .3])
 
         labels_train, gold_train = _generate_data(
@@ -159,13 +160,15 @@ class TestNaiveBayes(unittest.TestCase):
             if gold_train[i] == np.argmax(labels[i, :]) + 1:
                 correct += 1
 
-        self.assertGreater(float(correct) / m, .95)
+        self.assertGreater(float(correct) / m, .85)
 
     def test_estimate_model_input_formats(self):
         m = 1000
         n = 3
 
-        accuracies = np.array([.8] * 3)
+        accuracies = np.array([[.8, .8, .8],
+                               [.8, .8, .8],
+                               [.8, .8, .8]])
         propensities = np.array([.5] * n)
         class_balance = np.array([.1, .1, .8])
 
@@ -184,17 +187,19 @@ class TestNaiveBayes(unittest.TestCase):
             model = NaiveBayes(3, n)
             model.estimate_label_model(data)
             diff = np.sum(np.abs(accuracies - model.get_accuracies()))
-            self.assertAlmostEqual(diff[0], 0.0)
+            self.assertAlmostEqual(float(diff), 0.0)
             diff = np.sum(np.abs(propensities - model.get_propensities()))
-            self.assertAlmostEqual(diff[0], 0.0)
+            self.assertAlmostEqual(float(diff), 0.0)
             diff = np.sum(np.abs(class_balance - model.get_class_balance()))
-            self.assertAlmostEqual(diff[0], 0.0)
+            self.assertAlmostEqual(float(diff), 0.0)
 
     def test_get_label_input_formats(self):
         m = 1000
         n = 3
 
-        accuracies = np.array([.8] * 3)
+        accuracies = np.array([[.8, .8, .8],
+                               [.8, .8, .8],
+                               [.8, .8, .8]])
         propensities = np.array([.5] * n)
         class_balance = np.array([.1, .1, .8])
 
@@ -202,15 +207,15 @@ class TestNaiveBayes(unittest.TestCase):
             m, n, accuracies, propensities, class_balance)
 
         # Gets the label distribution for the generated data
-        model = NaiveBayes(3, n, init_lf_acc=0.8)
+        model = NaiveBayes(3, n, init_acc=0.8)
         distribution = model.get_label_distribution(labels_train)
 
         # Checks that other input formats work and do not change the results
         for data in util.get_all_formats(labels_train):
-            model = NaiveBayes(3, n, init_lf_acc=0.8)
+            model = NaiveBayes(3, n, init_acc=0.8)
             new_distribution = model.get_label_distribution(data)
             diff = np.sum(np.abs(distribution - new_distribution))
-            self.assertAlmostEqual(diff[0], 0.0)
+            self.assertAlmostEqual(float(diff), 0.0)
 
 
 def _generate_data(m, n, accuracies, propensities, class_balance):

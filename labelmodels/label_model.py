@@ -1,5 +1,6 @@
 import logging
 import numpy as np
+from scipy import sparse
 import torch
 import torch.nn as nn
 
@@ -11,32 +12,32 @@ class LabelModel(nn.Module):
     estimate_label_model(), and get_label_distribution().
     """
     def forward(self, *args):
-        """Computes the marginal log-likelihood of a batch of observed labeling
+        """Computes the marginal log-likelihood of a batch of observed
         function outputs provided as input.
 
-        :param args: batch of observed labeling function outputs
+        :param args: batch of observed function outputs and related metadata
         :return: 1-d tensor of log-likelihoods, one for each input example
         """
         raise NotImplementedError
 
     def estimate_label_model(self, *args, config=None):
-        """Learns the parameters of the label model from observed labeling
+        """Learns the parameters of the label model from observed
         function outputs.
 
         Subclasses that implement this method should call _do_estimate_label_model()
         if possible, to provide consistent behavior.
 
-        :param args: observed labeling function outputs and related metadata
+        :param args: observed function outputs and related metadata
         :param config: an instance of LearningConfig. If none, will initialize
-                       with default constructor
+                       with default LearningConfig constructor
         """
         raise NotImplementedError
 
     def get_label_distribution(self, *args):
         """Returns the estimated posterior distribution over true labels given
-        observed labeling function outputs.
+        observed function outputs.
 
-        :param args: observed labeling function outputs and related metadata
+        :param args: observed function outputs and related metadata
         :return: distribution over true labels. Structure depends on model type
         """
         raise NotImplementedError
@@ -93,7 +94,16 @@ class LabelModel(nn.Module):
 
 
 class ClassConditionalLabelModel(LabelModel):
-    def __init__(self, num_classes, num_lfs, init_lf_acc, acc_prior):
+    """
+    Abstract parent class for generative label models that assume labeling
+    functions are conditionally independent given the true label, and that each
+    labeling function is characterized by the following parameters:
+        * a propensity, which is the probability that it does not abstain
+        * class-conditional accuracies, each of which is the probability that
+          the labeling function's output is correct given that the true label
+          has a certain value. It is assumed that when
+    """
+    def __init__(self, num_classes, num_lfs, init_acc, acc_prior):
         """Constructor.
 
         Initializes label source accuracies argument and propensities uniformly.
@@ -101,25 +111,25 @@ class ClassConditionalLabelModel(LabelModel):
         :param num_classes: number of target classes, i.e., binary
                             classification = 2
         :param num_lfs: number of labeling functions to model
-        :param init_lf_acc: initial estimated labeling function accuracy, must
+        :param init_acc: initial estimated labeling function accuracy, must
                             be a float in [0,1]
         :param acc_prior: strength of regularization of estimated labeling
                           function accuracies toward their initial values
         """
-        super(LabelModel, self).__init__()
+        super().__init__()
 
-        # Converts init_lf_acc to log scale
-        init_lf_acc = -1 * np.log(1.0 / init_lf_acc - 1) / 2
+        # Converts init_acc to log scale
+        init_acc = -1 * np.log(1.0 / init_acc - 1) / 2
 
         init_param = torch.tensor(
-            [[init_lf_acc] * num_classes for _ in range(num_lfs)])
+            [[init_acc] * num_classes for _ in range(num_lfs)])
         self.accuracy = nn.Parameter(init_param)
         self.propensity = nn.Parameter(torch.zeros([num_lfs]))
 
         # Saves state
         self.num_classes = num_classes
         self.num_lfs = num_lfs
-        self.init_lf_acc = init_lf_acc
+        self.init_acc = init_acc
         self.acc_prior = acc_prior
 
     def get_accuracies(self):
@@ -142,10 +152,10 @@ class ClassConditionalLabelModel(LabelModel):
         prop = self.propensity.detach().numpy()
         return np.exp(prop) / (np.exp(prop) + 1)
 
-    def _get_observation_likelihoods(self, votes):
+    def _get_labeling_function_likelihoods(self, votes):
         """
-        Computes conditional log-likelihood of votes given class as an
-        m x k matrix.
+        Computes conditional log-likelihood of labeling function votes given
+        class as an m x k matrix.
 
         For efficiency, this function prefers that votes is an instance of
         scipy.sparse.coo_matrix. You can avoid a conversion by passing in votes
@@ -160,16 +170,16 @@ class ClassConditionalLabelModel(LabelModel):
         if type(votes) != sparse.coo_matrix:
             votes = sparse.coo_matrix(votes)
 
-        # Initializes joint log-likelihood of votes as an m x k matrix
+        # Initializes conditional log-likelihood of votes as an m x k matrix
         cll = torch.zeros(votes.shape[0], self.num_classes)
 
         # Initializes normalizing constants
-        z_prop = self.lf_propensity.unsqueeze(1)
+        z_prop = self.propensity.unsqueeze(1)
         z_prop = torch.cat((z_prop, torch.zeros((self.num_lfs, 1))), dim=1)
         z_prop = torch.logsumexp(z_prop, dim=1)
 
-        z_acc = self.lf_accuracy.unsqueeze(2)
-        z_acc = torch.cat((z_acc, -1 * self.lf_accuracy.unsqueeze(2)), dim=2)
+        z_acc = self.accuracy.unsqueeze(2)
+        z_acc = torch.cat((z_acc, -1 * self.accuracy.unsqueeze(2)), dim=2)
         z_acc = torch.logsumexp(z_acc, dim=2)
 
         # Subtracts normalizing constant for propensities from cll
@@ -180,10 +190,10 @@ class ClassConditionalLabelModel(LabelModel):
         for i, j, v in zip(votes.row, votes.col, votes.data):
             for k in range(self.num_classes):
                 if v == (k + 1):
-                    logp = self.lf_propensity[j] + self.lf_accuracy[j, k] - z_acc[j, k]
+                    logp = self.propensity[j] + self.accuracy[j, k] - z_acc[j, k]
                     cll[i, k] += logp
                 elif v != 0:
-                    logp = self.lf_propensity[j] - self.lf_accuracy[j, k] - z_acc[j, k]
+                    logp = self.propensity[j] - self.accuracy[j, k] - z_acc[j, k]
                     logp -= torch.log(torch.tensor(self.num_classes - 1.0))
                     cll[i, k] += logp
 
@@ -191,11 +201,11 @@ class ClassConditionalLabelModel(LabelModel):
 
     def _get_regularization_loss(self):
         """Computes the regularization loss of the model:
-        acc_prior * \|accuracy - init_lf_accuracy\|
+        acc_prior * \|accuracy - init_acc\|_2
 
         :return: value of regularization loss
         """
-        return self.acc_prior * torch.norm(self.accuracy - self.init_lf_acc)
+        return self.acc_prior * torch.norm(self.accuracy - self.init_acc)
 
 
 class LearningConfig(object):
