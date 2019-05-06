@@ -77,12 +77,14 @@ class NaiveBayes(ClassConditionalLabelModel):
         if config is None:
             config = LearningConfig()
 
+        # Initializes random seed
+        init_random(config.random_seed)
+
         # Converts to CSR to standardize input
         votes = sparse.csr_matrix(votes, dtype=np.int)
 
-        init_random(config.random_seed)
-        batches = self._create_minibatches(votes, config.batch_size,
-                                           shuffle_rows=True)
+        batches = self._create_minibatches(
+            votes, config.batch_size, shuffle_rows=True)
         self._do_estimate_label_model(batches, config)
 
     def get_label_distribution(self, votes):

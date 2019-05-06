@@ -31,8 +31,7 @@ class HMM(ClassConditionalLabelModel):
         :param acc_prior: strength of regularization of estimated labeling
                           function accuracies toward their initial values]
         """
-        super(ClassConditionalLabelModel, self).__init__(
-            num_classes, num_lfs, init_acc, acc_prior)
+        super().__init__(num_classes, num_lfs, init_acc, acc_prior)
 
         self.start_balance = nn.Parameter(torch.zeros([num_classes]))
         self.transitions = nn.Parameter(torch.zeros([num_classes, num_classes]))
