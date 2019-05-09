@@ -74,7 +74,8 @@ class HMM(ClassConditionalLabelModel):
 
     def viterbi(self, votes, seq_starts):
         """
-        Computes the most probable underlying sequence nodes given estimated parameters
+        Computes the most probable underlying sequence nodes given function
+        outputs and estimated parameters
 
         :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
                       lengths of the sequences in the batch, n is the number of
@@ -86,7 +87,6 @@ class HMM(ClassConditionalLabelModel):
                            first element in the ith sequence
         :return: vector of length m, where element is the most likely predicted labels
         """
-
         jll = self._get_labeling_function_likelihoods(votes)
         nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
         nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
@@ -187,7 +187,7 @@ class HMM(ClassConditionalLabelModel):
         """Returns the model's estimated transition distribution from class
         label to class label in a sequence.
 
-        :return: a k x k Numpy matrix, in which each element i, j is the
+        :return: a k x k Numpy array, in which each element i, j is the
         probability p(c_{t+1} = j + 1 | c_{t} = i + 1)
         """
         transitions = np.copy(self.transitions.detach().numpy())

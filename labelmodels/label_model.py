@@ -101,7 +101,8 @@ class ClassConditionalLabelModel(LabelModel):
         * a propensity, which is the probability that it does not abstain
         * class-conditional accuracies, each of which is the probability that
           the labeling function's output is correct given that the true label
-          has a certain value. It is assumed that when
+          has a certain value. It is assumed that when a labeling function makes
+          a mistake, the label it outputs is chosen uniformly at random
     """
     def __init__(self, num_classes, num_lfs, init_acc, acc_prior):
         """Constructor.
