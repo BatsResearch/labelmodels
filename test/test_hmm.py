@@ -13,25 +13,20 @@ class TestHMM(unittest.TestCase):
         pass
 
     def test_estimate_label_model_binary(self):
-        n = 10
+        n = 5
         k = 2
 
         accuracies = np.array([[.9, .8],
                                [.6, .7],
-                               [.5, .5],
-                               [.7, .6],
-                               [.8, .8],
-                               [.9, .8],
-                               [.6, .7],
-                               [.5, .5],
+                               [.6, .6],
                                [.7, .6],
                                [.8, .8]])
-        propensities = np.array([.6] * n)
-        start_balance = np.array([.2, .8])
-        transitions = np.array([[.5, .5], [.2, .8]])
+        propensities = np.array([.9] * n)
+        start_balance = np.array([.3, .7])
+        transitions = np.array([[.5, .5], [.3, .7]])
 
         labels_train, seq_starts_train, gold_train = _generate_data(
-            2000, 8, 12, n, accuracies, propensities, start_balance, transitions
+            1000, 8, 12, n, accuracies, propensities, start_balance, transitions
         )
 
         model = HMM(k, n, acc_prior=0.0)
@@ -53,44 +48,28 @@ class TestHMM(unittest.TestCase):
                 self.assertAlmostEqual(diff, 0.0, places=1)
 
     def test_viterbi(self):
+        m = 500
         n = 10
-        k = 2
-
-        accuracies = np.array([[.9, .8],
-                               [.6, .7],
-                               [.5, .5],
-                               [.7, .6],
-                               [.8, .8],
-                               [.9, .8],
-                               [.6, .7],
-                               [.5, .5],
-                               [.7, .6],
-                               [.8, .8]])
-        propensities = np.array([.6] * n)
-        start_balance = np.array([.2, .8])
-        transitions = np.array([[.5, .5], [.2, .8]])
-
-        labels_train, seq_starts_train, gold_train = _generate_data(
-            500, 8, 12, n, accuracies, propensities, start_balance, transitions
-        )
+        k = 3
 
         model = HMM(k, n, acc_prior=0.0)
-        model.estimate_label_model(labels_train, seq_starts_train)
 
+        model.start_balance[0] = 0
+        model.start_balance[1] = 0.5
         for i in range(n):
+            model.propensity[i] = 2
             for j in range(k):
-                diff = accuracies[i, j] - model.get_accuracies()[i, j]
-                self.assertLess(np.abs(diff), 0.1)
-        for i in range(n):
-            diff = propensities[i] - model.get_propensities()[i]
-            self.assertLess(np.abs(diff), 0.1)
-        for i in range(k):
-            diff = start_balance[i] - model.get_start_balance()[i]
-            self.assertLess(np.abs(diff), 0.1)
+                model.accuracy[i, j] = 2
         for i in range(k):
             for j in range(k):
-                diff = transitions[i, j] - model.get_transition_matrix()[i, j]
-                self.assertLess(np.abs(diff), 0.1)
+                model.transitions[i, j] = 1 if i == j else 0
+
+        labels_train, seq_starts_train, gold_train = _generate_data(
+            m, 8, 12, n,
+            model.get_accuracies(),
+            model.get_propensities(),
+            model.get_start_balance(),
+            model.get_transition_matrix())
 
         predictions = model.viterbi(labels_train, seq_starts_train)
         correct = 0
@@ -98,7 +77,61 @@ class TestHMM(unittest.TestCase):
             if predictions[i] == gold_train[i]:
                 correct += 1
         accuracy = correct / float(len(predictions))
-        self.assertGreaterEqual(accuracy, .80)
+        self.assertGreaterEqual(accuracy, .95)
+
+    def test_get_label_distribution(self):
+        m = 500
+        n = 10
+        k = 3
+
+        model = HMM(k, n, acc_prior=0.0)
+
+        model.start_balance[0] = 0
+        model.start_balance[1] = 0.5
+        for i in range(n):
+            model.propensity[i] = 2
+            for j in range(k):
+                model.accuracy[i, j] = 2
+        for i in range(k):
+            for j in range(k):
+                model.transitions[i, j] = 1 if i == j else 0
+
+        labels_train, seq_starts_train, gold_train = _generate_data(
+            m, 8, 12, n,
+            model.get_accuracies(),
+            model.get_propensities(),
+            model.get_start_balance(),
+            model.get_transition_matrix())
+
+        p_unary, p_pairwise = model.get_label_distribution(
+            labels_train, seq_starts_train)
+
+        # Makes predictions using both unary and pairwise marginals
+        pred_unary = np.argmax(p_unary, axis=1) + 1
+        pred_pairwise = np.zeros((labels_train.shape[0],), dtype=np.int)
+        next_seq = 0
+        for i in range(labels_train.shape[0] - 1):
+            if next_seq == len(seq_starts_train) or i < seq_starts_train[next_seq] - 1:
+                # i is neither the start nor end of a sequence
+                pred_pairwise[i+1] = np.argmax(p_pairwise[i][pred_pairwise[i]])
+            elif i == seq_starts_train[next_seq]:
+                # i is the start of a sequence
+                a, b = np.unravel_index(p_pairwise[i].argmax(), (k, k))
+                pred_pairwise[i], pred_pairwise[i + 1] = a, b
+                next_seq += 1
+            else:
+                # i is the end of a sequence
+                pass
+        pred_pairwise += 1
+
+        # Checks that predictions are accurate
+        for predictions in (pred_unary, pred_pairwise):
+            correct = 0
+            for i in range(len(predictions)):
+                if predictions[i] == gold_train[i]:
+                    correct += 1
+            accuracy = correct / float(len(predictions))
+            self.assertGreaterEqual(accuracy, .95)
 
 
 def _generate_data(num_seqs, min_seq, max_seq, num_lfs, accuracies,

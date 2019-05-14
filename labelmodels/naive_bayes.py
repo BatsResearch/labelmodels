@@ -61,9 +61,6 @@ class NaiveBayes(ClassConditionalLabelModel):
         joint_ll = conditional_ll + class_ll
         return torch.logsumexp(joint_ll, dim=1)
 
-    def _get_norm_class_balance(self):
-        return self.class_balance - torch.logsumexp(self.class_balance, dim=0)
-
     def estimate_label_model(self, votes, config=None):
         """Estimates the parameters of the label model based on observed
         labeling function outputs.
@@ -140,3 +137,6 @@ class NaiveBayes(ClassConditionalLabelModel):
         ]
 
         return batches
+
+    def _get_norm_class_balance(self):
+        return self.class_balance - torch.logsumexp(self.class_balance, dim=0)

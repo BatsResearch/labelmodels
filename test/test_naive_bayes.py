@@ -14,26 +14,20 @@ class TestNaiveBayes(unittest.TestCase):
         pass
 
     def test_estimate_label_model_binary(self):
-        m = 20000
-        n = 10
+        m = 25000
+        n = 5
         accuracies = np.array([[.9, .8],
                                [.6, .7],
                                [.5, .5],
                                [.7, .6],
-                               [.8, .8],
-                               [.9, .8],
-                               [.6, .7],
-                               [.5, .5],
-                               [.7, .6],
                                [.8, .8]])
-        propensities = np.array([.25] * n)
-        class_balance = np.array([.3, .7])
+        propensities = np.array([.3] * n)
+        class_balance = np.array([.4, .6])
 
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = NaiveBayes(
-            2, n, learn_class_balance=True, acc_prior=0.0)
+        model = NaiveBayes(2, n, learn_class_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for j in range(n):
@@ -61,8 +55,7 @@ class TestNaiveBayes(unittest.TestCase):
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = NaiveBayes(
-            3, n, learn_class_balance=True, acc_prior=0.0)
+        model = NaiveBayes(3, n, learn_class_balance=True, acc_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for j in range(n):
@@ -78,37 +71,23 @@ class TestNaiveBayes(unittest.TestCase):
 
     def test_get_label_distribution_binary(self):
         m = 10000
-        n = 10
-        accuracies = np.array([[.9, .8],
-                               [.6, .7],
-                               [.5, .5],
-                               [.7, .6],
-                               [.8, .8],
-                               [.9, .8],
-                               [.6, .7],
-                               [.5, .5],
-                               [.7, .6],
-                               [.8, .8]])
-        propensities = np.array([.5] * n)
-        class_balance = np.array([.3, .7])
+        n = 5
+        k = 2
+
+        model = NaiveBayes(k, n, learn_class_balance=True, acc_prior=0.0)
+
+        model.class_balance[0] = 0
+        model.class_balance[1] = 0.5
+        for i in range(n):
+            model.propensity[i] = 2
+            for j in range(k):
+                model.accuracy[i, j] = 2
 
         labels_train, gold_train = _generate_data(
-            m, n, accuracies, propensities, class_balance)
-
-        model = NaiveBayes(
-            2, n, learn_class_balance=True, acc_prior=0.0)
-        model.estimate_label_model(labels_train)
-
-        for j in range(n):
-            for k in range(2):
-                diff = accuracies[j, k] - model.get_accuracies()[j, k]
-                self.assertAlmostEqual(diff, 0.0, places=1)
-        for j in range(n):
-            diff = propensities[j] - model.get_propensities()[j]
-            self.assertAlmostEqual(diff, 0.0, places=1)
-        for k in range(len(class_balance)):
-            diff = class_balance[k] - model.get_class_balance()[k]
-            self.assertAlmostEqual(diff, 0.0, places=1)
+            m, n,
+            model.get_accuracies(),
+            model.get_propensities(),
+            model.get_class_balance())
 
         # Checks label inference
         labels = model.get_label_distribution(labels_train)
@@ -117,41 +96,28 @@ class TestNaiveBayes(unittest.TestCase):
             if gold_train[i] == np.argmax(labels[i, :]) + 1:
                 correct += 1
 
-        self.assertGreater(float(correct) / m, .85)
+        self.assertGreater(float(correct) / m, .95)
 
     def test_get_label_distribution_multiclass(self):
         m = 10000
-        n = 10
-        accuracies = np.array([[.9, .8, .5],
-                               [.6, .7, .5],
-                               [.5, .5, .9],
-                               [.7, .6, .7],
-                               [.8, .8, .7],
-                               [.9, .8, .5],
-                               [.6, .7, .5],
-                               [.5, .5, .9],
-                               [.7, .6, .7],
-                               [.8, .8, .7]])
-        propensities = np.array([.5] * n)
-        class_balance = np.array([.3, .4, .3])
+        n = 5
+        k = 3
+
+        model = NaiveBayes(k, n, learn_class_balance=True, acc_prior=0.0)
+
+        model.class_balance[0] = 0
+        model.class_balance[1] = 0.5
+        model.class_balance[2] = 0.5
+        for i in range(n):
+            model.propensity[i] = 2
+            for j in range(k):
+                model.accuracy[i, j] = 2
 
         labels_train, gold_train = _generate_data(
-            m, n, accuracies, propensities, class_balance)
-
-        model = NaiveBayes(
-            3, n, learn_class_balance=True, acc_prior=0.0)
-        model.estimate_label_model(labels_train)
-
-        for j in range(n):
-            for k in range(2):
-                diff = accuracies[j, k] - model.get_accuracies()[j, k]
-                self.assertAlmostEqual(diff, 0.0, places=1)
-        for j in range(n):
-            diff = propensities[j] - model.get_propensities()[j]
-            self.assertAlmostEqual(diff, 0.0, places=1)
-        for k in range(len(class_balance)):
-            diff = class_balance[k] - model.get_class_balance()[k]
-            self.assertAlmostEqual(diff, 0.0, places=1)
+            m, n,
+            model.get_accuracies(),
+            model.get_propensities(),
+            model.get_class_balance())
 
         # Checks label inference
         labels = model.get_label_distribution(labels_train)
@@ -160,7 +126,7 @@ class TestNaiveBayes(unittest.TestCase):
             if gold_train[i] == np.argmax(labels[i, :]) + 1:
                 correct += 1
 
-        self.assertGreater(float(correct) / m, .85)
+        self.assertGreater(float(correct) / m, .95)
 
     def test_estimate_model_input_formats(self):
         m = 1000

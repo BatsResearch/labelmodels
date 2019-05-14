@@ -57,65 +57,21 @@ class HMM(ClassConditionalLabelModel):
                  corresponding sequence of outputs in votes
         """
         jll = self._get_labeling_function_likelihoods(votes)
-        # Normalize transition matrix
-        nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
-        nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
+        norm_start_balance = self._get_norm_start_balance()
+        norm_transitions = self._get_norm_transitions()
         for i in range(0, votes.shape[0]):
             if i in seq_starts:
-                jll[i, :] = jll[i, :] + nor_start_balance
+                jll[i, :] = jll[i, :] + norm_start_balance
             else:
-                joint_class_pair = jll[i-1, :].clone().unsqueeze(1).repeat(1, self.num_classes) + nor_transitions
-                marginal_current_class = torch.logsumexp(joint_class_pair, dim=0)
+                joint_class_pair = jll[i - 1, :].clone().unsqueeze(1)
+                joint_class_pair = joint_class_pair.repeat(1, self.num_classes)
+                joint_class_pair = joint_class_pair + norm_transitions
+                marginal_current_class = joint_class_pair.logsumexp(0)
                 jll[i, :] = jll[i, :] + marginal_current_class
         seq_ends = [x - 1 for x in seq_starts] + [votes.shape[0]-1]
         seq_ends.remove(-1)
         mll = torch.logsumexp(jll[seq_ends], dim=1)
         return mll
-
-    def viterbi(self, votes, seq_starts):
-        """
-        Computes the most probable underlying sequence nodes given function
-        outputs and estimated parameters
-
-        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
-                      lengths of the sequences in the batch, n is the number of
-                      labeling functions and k is the number of classes
-        :param seq_starts: vector of length l of row indices in votes indicating
-                           the start of each sequence, where l is the number of
-                           sequences in the batch. So, votes[seq_starts[i]] is
-                           the row vector of labeling function outputs for the
-                           first element in the ith sequence
-        :return: vector of length m, where element is the most likely predicted labels
-        """
-        jll = self._get_labeling_function_likelihoods(votes)
-        nor_transitions = self.transitions - torch.logsumexp(self.transitions, dim=1).unsqueeze(1).repeat(1, self.num_classes)
-        nor_start_balance = self.start_balance - torch.logsumexp(self.start_balance, dim=0)
-
-        T = votes.shape[0]
-        bt = torch.zeros([T, self.num_classes])
-        for i in range(0, T):
-            if i in seq_starts:
-                jll[i, :] += nor_start_balance
-            else: 
-                p = jll[i-1, :].clone().unsqueeze(1).repeat(
-                    1, self.num_classes) + nor_transitions
-                jll[i, :] += torch.max(p, dim=0)[0]
-                bt[i, :] = torch.argmax(p, dim=0)
-
-        seq_ends = [x - 1 for x in seq_starts] + [votes.shape[0] - 1]
-        res = []
-        j = T-1
-        while j >= 0:
-            if j in seq_ends:
-                res.append(torch.argmax(jll[j, :]).item())
-            if j in seq_starts:
-                j -= 1
-                continue
-            res.append(int(bt[j, res[-1]].item()))
-            j -= 1
-        res = [x + 1 for x in res] 
-        res.reverse()
-        return res
 
     def estimate_label_model(self, votes, seq_starts, config=None):
         """Estimates the parameters of the label model based on observed
@@ -124,9 +80,9 @@ class HMM(ClassConditionalLabelModel):
         Note that a minibatch's size refers to the number of sequences in the
         minibatch.
 
-        :param votes: m x n matrix in {0, ..., k}, where m is the batch size,
-                      n is the number of labeling functions and k is the number
-                      of classes
+        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
+                      lengths of the sequences in the data, n is the number of
+                      labeling functions and k is the number of classes
         :param seq_starts: vector of length l of row indices in votes indicating
                            the start of each sequence, where l is the number of
                            sequences in the batch. So, votes[seq_starts[i]] is
@@ -145,13 +101,187 @@ class HMM(ClassConditionalLabelModel):
         votes = sparse.csr_matrix(votes, dtype=np.int)
         seq_starts = np.array(seq_starts, dtype=np.int)
 
-        # TODO: shuffle sequences
+        batches = self._create_minibatches(votes, seq_starts, config.batch_size)
 
-        # Creates minibatches
+        self._do_estimate_label_model(batches, config)
+
+    def viterbi(self, votes, seq_starts):
+        """
+        Computes the most probable underlying sequence nodes given function
+        outputs
+
+        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
+                      lengths of the sequences in the data, n is the number of
+                      labeling functions and k is the number of classes
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, votes[seq_starts[i]] is
+                           the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :return: vector of length m, where element is the most likely predicted labels
+        """
+        # Converts to CSR and integers to standardize input
+        votes = sparse.csr_matrix(votes, dtype=np.int)
+        seq_starts = np.array(seq_starts, dtype=np.int)
+
+        out = np.ndarray((votes.shape[0],), dtype=np.int)
+
+        offset = 0
+        for votes, seq_starts in self._create_minibatches(votes, seq_starts, 32):
+            jll = self._get_labeling_function_likelihoods(votes)
+            norm_start_balance = self._get_norm_start_balance()
+            norm_transitions = self._get_norm_transitions()
+
+            T = votes.shape[0]
+            bt = torch.zeros([T, self.num_classes])
+            for i in range(0, T):
+                if i in seq_starts:
+                    jll[i, :] += norm_start_balance
+                else:
+                    p = jll[i-1, :].clone().unsqueeze(1).repeat(
+                        1, self.num_classes) + norm_transitions
+                    jll[i, :] += torch.max(p, dim=0)[0]
+                    bt[i, :] = torch.argmax(p, dim=0)
+
+            seq_ends = [x - 1 for x in seq_starts] + [votes.shape[0] - 1]
+            res = []
+            j = T-1
+            while j >= 0:
+                if j in seq_ends:
+                    res.append(torch.argmax(jll[j, :]).item())
+                if j in seq_starts:
+                    j -= 1
+                    continue
+                res.append(int(bt[j, res[-1]].item()))
+                j -= 1
+            res = [x + 1 for x in res]
+            res.reverse()
+
+            for i in range(len(res)):
+                out[offset + i] = res[i]
+            offset += len(res)
+        return out
+
+    def get_label_distribution(self, votes, seq_starts):
+        """Returns the unary and pairwise marginals over true labels estimated
+        by the model.
+
+        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
+                      lengths of the sequences in the data, n is the number of
+                      labeling functions and k is the number of classes
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, votes[seq_starts[i]] is
+                           the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :return: p_unary, p_pairwise where p_unary is a m x k matrix representing
+                 the marginal distributions over individual labels, and p_pairwise
+                 is a m x k x k tensor representing pairwise marginals over the
+                 ith and (i+1)th labels. For the last element in a sequence, the
+                 k x k matrix will be all zeros.
+        """
+        # Converts to CSR and integers to standardize input
+        votes = sparse.csr_matrix(votes, dtype=np.int)
+        seq_starts = np.array(seq_starts, dtype=np.int)
+
+        out_unary = np.zeros((votes.shape[0], self.num_classes), dtype=np.int)
+        out_pairwise = np.zeros(
+            (votes.shape[0], self.num_classes, self.num_classes), dtype=np.int)
+
+        offset = 0
+        for votes, seq_starts in self._create_minibatches(votes, seq_starts, 32):
+            # Computes observation likelihoods and initializes alpha and beta messages
+            cll = self._get_labeling_function_likelihoods(votes)
+            alpha = torch.zeros(cll.shape)
+            beta = torch.zeros(cll.shape)
+
+            # Computes alpha
+            next_seq = 0
+            for i in range(votes.shape[0]):
+                if next_seq == len(seq_starts) or i < seq_starts[next_seq]:
+                    # i is not the start of a sequence
+                    temp = alpha[i-1].unsqueeze(1).repeat(1, self.num_classes)
+                    temp = temp + self._get_norm_transitions()
+                    alpha[i] = cll[i] + temp.logsumexp(0)
+                else:
+                    # i is the start of a sequence
+                    alpha[i] = cll[i] + self._get_norm_start_balance()
+                    next_seq += 1
+
+            # Computes beta
+            this_seq = seq_starts.shape[0] - 1
+            beta[-1, :] = 1
+            for i in range(votes.shape[0] - 2, -1, -1):
+                if i == seq_starts[this_seq] - 1:
+                    # End of sequence
+                    beta[i, :] = 1
+                    this_seq -= 1
+                else:
+                    temp = beta[i+1] + cll[i+1]
+                    temp = temp.unsqueeze(1).repeat(1, self.num_classes)
+                    temp = temp + self._get_norm_transitions()
+                    beta[i, :] = temp.logsumexp(0)
+
+            # Computes p_unary
+            p_unary = alpha + beta
+            temp = p_unary.logsumexp(1).unsqueeze(1).repeat(1, self.num_classes)
+            p_unary = p_unary - temp
+            for i in range(p_unary.shape[0]):
+                p = torch.exp(p_unary[i, :] - torch.max(p_unary[i, :]))
+                p = p / p.sum()
+                for j in range(self.num_classes):
+                    out_unary[offset + i, j] = p[j]
+
+            # Computes p_pairwise
+            p_pairwise = torch.zeros(
+                (votes.shape[0], self.num_classes, self.num_classes))
+            for i in range(p_pairwise.shape[0] - 1):
+                p_pairwise[i, :, :] = self._get_norm_transitions()
+                p_pairwise[i] += alpha[i].unsqueeze(1).repeat(1, self.num_classes)
+                p_pairwise[i] += cll[i+1].unsqueeze(1).repeat(1, self.num_classes)
+                p_pairwise[i] += beta[i+1].unsqueeze(1).repeat(1, self.num_classes)
+
+                denom = p_pairwise[i].view(-1).logsumexp(0)
+                denom = denom.unsqueeze(0).unsqueeze(1)
+                denom = denom.repeat(self.num_classes, self.num_classes)
+                p_pairwise[i] -= denom
+
+                for j in range(self.num_classes):
+                    for k in range(self.num_classes):
+                        out_pairwise[offset + i, j, k] = p_pairwise[i, j, k]
+
+            offset += votes.shape[0]
+
+        return out_unary, out_pairwise
+
+    def get_start_balance(self):
+        """Returns the model's estimated class balance for the start of a
+        sequence
+
+        :return: a NumPy array with one element in [0,1] for each target class,
+                 representing the estimated prior probability that the first
+                 element in an example sequence has that label
+        """
+        return np.exp(self._get_norm_start_balance().detach().numpy())
+
+    def get_transition_matrix(self):
+        """Returns the model's estimated transition distribution from class
+        label to class label in a sequence.
+
+        :return: a k x k Numpy array, in which each element i, j is the
+        probability p(c_{t+1} = j + 1 | c_{t} = i + 1)
+        """
+        return np.exp(self._get_norm_transitions().detach().numpy())
+
+    def _create_minibatches(self, votes, seq_starts, batch_size, shuffle_seqs=False):
+        # TODO: shuffle sequences
+        if shuffle_seqs:
+            raise ValueError("Shuffling not implemented.")
+
         seq_start_batches = [np.array(
-            seq_starts[i * config.batch_size: ((i + 1) * config.batch_size + 1)],
+            seq_starts[i * batch_size: ((i + 1) * batch_size + 1)],
             copy=True)
-            for i in range(int(np.ceil(len(seq_starts) / config.batch_size)))
+            for i in range(int(np.ceil(len(seq_starts) / batch_size)))
         ]
         seq_start_batches[-1] = np.concatenate((seq_start_batches[-1], [votes.shape[0]]))
 
@@ -163,35 +293,13 @@ class HMM(ClassConditionalLabelModel):
                 )
             )
 
-        seq_start_batches = [x[:-1]-x[0] for x in seq_start_batches]
+        seq_start_batches = [x[:-1] - x[0] for x in seq_start_batches]
 
-        batches = list(zip(vote_batches, seq_start_batches))
-        self._do_estimate_label_model(batches, config)
+        return list(zip(vote_batches, seq_start_batches))
 
-    def get_label_distribution(self, votes, seq_starts):
-        raise NotImplementedError
+    def _get_norm_start_balance(self):
+        return self.start_balance - self.start_balance.logsumexp(0)
 
-    def get_start_balance(self):
-        """Returns the model's estimated class balance for the start of a
-        sequence
-
-        :return: a NumPy array with one element in [0,1] for each target class,
-                 representing the estimated prior probability that the first
-                 element in an example sequence has that label
-        """
-        start_balance = self.start_balance.detach().numpy()
-        p = np.exp(start_balance - np.max(start_balance))
-        return p / p.sum()
-
-    def get_transition_matrix(self):
-        """Returns the model's estimated transition distribution from class
-        label to class label in a sequence.
-
-        :return: a k x k Numpy array, in which each element i, j is the
-        probability p(c_{t+1} = j + 1 | c_{t} = i + 1)
-        """
-        transitions = np.copy(self.transitions.detach().numpy())
-        for i in range(transitions.shape[0]):
-            transitions[i] = np.exp(transitions[i] - np.max(transitions[i]))
-            transitions[i] = transitions[i] / transitions[i].sum()
-        return transitions 
+    def _get_norm_transitions(self):
+        denom = self.transitions.logsumexp(1).unsqueeze(1).repeat(1, self.num_classes)
+        return self.transitions - denom
