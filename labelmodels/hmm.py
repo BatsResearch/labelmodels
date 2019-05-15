@@ -184,9 +184,8 @@ class HMM(ClassConditionalLabelModel):
         votes = sparse.csr_matrix(votes, dtype=np.int)
         seq_starts = np.array(seq_starts, dtype=np.int)
 
-        out_unary = np.zeros((votes.shape[0], self.num_classes), dtype=np.int)
-        out_pairwise = np.zeros(
-            (votes.shape[0], self.num_classes, self.num_classes), dtype=np.int)
+        out_unary = np.zeros((votes.shape[0], self.num_classes))
+        out_pairwise = np.zeros((votes.shape[0], self.num_classes, self.num_classes))
 
         offset = 0
         for votes, seq_starts in self._create_minibatches(votes, seq_starts, 32):
@@ -228,9 +227,7 @@ class HMM(ClassConditionalLabelModel):
             p_unary = p_unary - temp
             for i in range(p_unary.shape[0]):
                 p = torch.exp(p_unary[i, :] - torch.max(p_unary[i, :]))
-                p = p / p.sum()
-                for j in range(self.num_classes):
-                    out_unary[offset + i, j] = p[j]
+                out_unary[offset + i, :] = (p / p.sum()).detach()
 
             # Computes p_pairwise
             p_pairwise = torch.zeros(
@@ -238,17 +235,15 @@ class HMM(ClassConditionalLabelModel):
             for i in range(p_pairwise.shape[0] - 1):
                 p_pairwise[i, :, :] = self._get_norm_transitions()
                 p_pairwise[i] += alpha[i].unsqueeze(1).repeat(1, self.num_classes)
-                p_pairwise[i] += cll[i+1].unsqueeze(1).repeat(1, self.num_classes)
-                p_pairwise[i] += beta[i+1].unsqueeze(1).repeat(1, self.num_classes)
+                p_pairwise[i] += cll[i+1].unsqueeze(0).repeat(self.num_classes, 1)
+                p_pairwise[i] += beta[i+1].unsqueeze(0).repeat(self.num_classes, 1)
 
                 denom = p_pairwise[i].view(-1).logsumexp(0)
                 denom = denom.unsqueeze(0).unsqueeze(1)
                 denom = denom.repeat(self.num_classes, self.num_classes)
                 p_pairwise[i] -= denom
 
-                for j in range(self.num_classes):
-                    for k in range(self.num_classes):
-                        out_pairwise[offset + i, j, k] = p_pairwise[i, j, k]
+                out_pairwise[offset + i, :, :] = torch.exp(p_pairwise[i]).detach()
 
             offset += votes.shape[0]
 
