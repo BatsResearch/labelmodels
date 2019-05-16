@@ -5,49 +5,61 @@ import torch
 from torch import nn
 
 
-class HMM(ClassConditionalLabelModel):
+class LinkedHMM(ClassConditionalLabelModel):
     """A generative label model that treats a sequence of true class labels as a
     Markov chain, as in a hidden Markov model, and treats all labeling functions
     as conditionally independent given the corresponding true class label, as
     in a Naive Bayes model.
 
-    Proposed for crowdsourced sequence annotations in: A. T. Nguyen, B. C.
-    Wallace, J. J. Li, A. Nenkova, and M. Lease. Aggregating and Predicting
-    Sequence Labels from Crowd Annotations. In Annual Meeting of the Association
-    for Computational Linguistics, 2017.
+    In addition, the linked HMM captures linking functions that are conditioned
+    on consecutive pairs of hidden states, with distributions that depend on
+    whether the linked states are the same or different. The outputs of these
+    functions are represented as a separate m x n link matrix in {-1, 0, 1},
+    where m is the sum of the lengths of the sequences in the data and n is the
+    number of linking functions. An output of 1 at entry i, j indicates that
+    true labels i-1 and i have the same value, -1 indicates they do not, and
+    0 means the linking function abstains. (Linking functions always abstain on
+    the first element in each sequence in the data.)
     """
 
-    def __init__(self, num_classes, num_lfs, init_acc=.9, acc_prior=.025):
+    def __init__(self, num_classes, num_labeling_funcs, num_linking_funcs,
+                 init_acc=.9, acc_prior=.025):
         """Constructor.
 
-        Initializes labeling function accuracies using optional argument and all
-        other model parameters uniformly.
+        Initializes labeling and linking function accuracies using optional
+        argument and all other model parameters uniformly.
 
         :param num_classes: number of target classes, i.e., binary
                             classification = 2
-        :param num_lfs: number of labeling functions to model
-        :param init_acc: initial estimated labeling function accuracy, must
-                            be a float in [0,1]
-        :param acc_prior: strength of regularization of estimated labeling
-                          function accuracies toward their initial values
+        :param num_labeling_funcs: number of labeling functions to model
+        :param num_linking_funcs: number of linking functions to model
+        :param init_acc: initial estimated labeling and linking function
+                         accuracy, must be a float in [0,1]
+        :param acc_prior: strength of regularization of estimated labeling and
+                          linking function accuracies toward their initial values
         """
-        super().__init__(num_classes, num_lfs, init_acc, acc_prior)
+        super().__init__(num_classes, num_labeling_funcs, init_acc, acc_prior)
 
+        self.link_accuracy = nn.Parameter(torch.zeros([num_linking_funcs]))
         self.start_balance = nn.Parameter(torch.zeros([num_classes]))
         self.transitions = nn.Parameter(torch.zeros([num_classes, num_classes]))
 
-    def forward(self, votes, seq_starts):
+    def forward(self, label_votes, link_votes, seq_starts):
         """
-        Computes log likelihood of sequence of labeling function outputs for
-        each (sequence) example in batch.
+        Computes log likelihood of sequence of labeling and linking function
+        outputs for each (sequence) example in batch.
 
-        For efficiency, this function prefers that votes is an instance of
-        scipy.sparse.coo_matrix. You can avoid a conversion by passing in votes
-        with this class.
+        For efficiency, this function prefers that label_votes and link_votes
+        are instances of scipy.sparse.coo_matrix. You can avoid a conversion by
+        passing them in as this class.
 
-        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
-                      lengths of the sequences in the batch, n is the number of
-                      labeling functions and k is the number of classes
+        :param label_votes: m x n matrix in {0, ..., k}, where m is the sum of
+                            the lengths of the sequences in the batch, n is the
+                            number of labeling functions and k is the number of
+                            classes
+        :param link_votes: m x n matrix in {-1, 0, 1}, where m is the sum of
+                           the lengths of the sequences in the batch and n is the
+                           number of linking functions
         :param seq_starts: vector of length l of row indices in votes indicating
                            the start of each sequence, where l is the number of
                            sequences in the batch. So, votes[seq_starts[i]] is
@@ -56,7 +68,7 @@ class HMM(ClassConditionalLabelModel):
         :return: vector of length l, where element is the log-likelihood of the
                  corresponding sequence of outputs in votes
         """
-        jll = self._get_labeling_function_likelihoods(votes)
+        jll = self._get_labeling_function_likelihoods(label_votes)
         norm_start_balance = self._get_norm_start_balance()
         norm_transitions = self._get_norm_transitions()
         for i in range(0, votes.shape[0]):
@@ -268,7 +280,12 @@ class HMM(ClassConditionalLabelModel):
         """
         return np.exp(self._get_norm_transitions().detach().numpy())
 
-    def _create_minibatches(self, votes, seq_starts, batch_size, shuffle_seqs=False):
+    def _create_minibatches(self, label_votes, link_votes, seq_starts,
+                            batch_size, shuffle_seqs=False):
+        if label_votes.shape[0] != link_votes.shape[0]:
+            raise ValueError("label_votes and link_votes must have same number "
+                             "of rows")
+
         # TODO: shuffle sequences
         if shuffle_seqs:
             raise ValueError("Shuffling not implemented.")
@@ -278,7 +295,8 @@ class HMM(ClassConditionalLabelModel):
             copy=True)
             for i in range(int(np.ceil(len(seq_starts) / batch_size)))
         ]
-        seq_start_batches[-1] = np.concatenate((seq_start_batches[-1], [votes.shape[0]]))
+        seq_start_batches[-1] = np.concatenate(
+            (seq_start_batches[-1], [label_votes.shape[0]]))
 
         vote_batches = []
         for seq_start_batch in seq_start_batches:
