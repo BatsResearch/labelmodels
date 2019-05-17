@@ -47,6 +47,43 @@ class TestHMM(unittest.TestCase):
                 diff = transitions[i, j] - model.get_transition_matrix()[i, j]
                 self.assertAlmostEqual(diff, 0.0, places=1)
 
+    def test_estimate_label_model_multiclass(self):
+        n = 5
+        k = 3
+
+        accuracies = np.array([[.9, .8, .9],
+                               [.6, .7, .9],
+                               [.6, .6, .9],
+                               [.7, .6, .9],
+                               [.8, .8, .9]])
+        propensities = np.array([.9] * n)
+        start_balance = np.array([.3, .3, .4])
+        transitions = np.array([[.5, .3, .2],
+                                [.3, .4, .3],
+                                [.2, .5, .3]])
+
+        labels_train, seq_starts_train, gold_train = _generate_data(
+            1000, 8, 12, n, accuracies, propensities, start_balance, transitions
+        )
+
+        model = HMM(k, n, acc_prior=0.0)
+        model.estimate_label_model(labels_train, seq_starts_train)
+
+        for i in range(n):
+            for j in range(k):
+                diff = accuracies[i, j] - model.get_accuracies()[i, j]
+                self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(n):
+            diff = propensities[i] - model.get_propensities()[i]
+            self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(k):
+            diff = start_balance[i] - model.get_start_balance()[i]
+            self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(k):
+            for j in range(k):
+                diff = transitions[i, j] - model.get_transition_matrix()[i, j]
+                self.assertAlmostEqual(diff, 0.0, places=1)
+
     def test_viterbi(self):
         m = 500
         n = 10

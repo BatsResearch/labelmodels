@@ -187,7 +187,7 @@ class ClassConditionalLabelModel(LabelModel):
         # (since it applies to all outcomes)
         cll -= torch.sum(z_prop)
 
-        # Loops over votes and classes to compute joint log-likelihood
+        # Loops over votes and classes to compute conditional log-likelihood
         for i, j, v in zip(votes.row, votes.col, votes.data):
             for k in range(self.num_classes):
                 if v == (k + 1):

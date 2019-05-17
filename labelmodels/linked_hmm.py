@@ -18,8 +18,11 @@ class LinkedHMM(ClassConditionalLabelModel):
     where m is the sum of the lengths of the sequences in the data and n is the
     number of linking functions. An output of 1 at entry i, j indicates that
     true labels i-1 and i have the same value, -1 indicates they do not, and
-    0 means the linking function abstains. (Linking functions always abstain on
-    the first element in each sequence in the data.)
+    0 means the linking function abstains.
+
+    The link matrix always has a row of 0 corresponding to the first element in
+    each sequence in the data, because linking functions operate on pairs of
+    elements. This does not count as an abstention.
     """
 
     def __init__(self, num_classes, num_labeling_funcs, num_linking_funcs,
@@ -41,8 +44,12 @@ class LinkedHMM(ClassConditionalLabelModel):
         super().__init__(num_classes, num_labeling_funcs, init_acc, acc_prior)
 
         self.link_accuracy = nn.Parameter(torch.zeros([num_linking_funcs]))
+        self.link_propensity = nn.Parameter(torch.zeros([num_linking_funcs]))
         self.start_balance = nn.Parameter(torch.zeros([num_classes]))
         self.transitions = nn.Parameter(torch.zeros([num_classes, num_classes]))
+
+        # Saves state
+        self.num_linking_funcs = num_linking_funcs
 
     def forward(self, label_votes, link_votes, seq_starts):
         """
@@ -62,8 +69,8 @@ class LinkedHMM(ClassConditionalLabelModel):
                            number of linking functions
         :param seq_starts: vector of length l of row indices in votes indicating
                            the start of each sequence, where l is the number of
-                           sequences in the batch. So, votes[seq_starts[i]] is
-                           the row vector of labeling function outputs for the
+                           sequences in the batch. So, label_votes[seq_starts[i]]
+                           is the row vector of labeling function outputs for the
                            first element in the ith sequence
         :return: vector of length l, where element is the log-likelihood of the
                  corresponding sequence of outputs in votes
@@ -116,6 +123,38 @@ class LinkedHMM(ClassConditionalLabelModel):
         batches = self._create_minibatches(votes, seq_starts, config.batch_size)
 
         self._do_estimate_label_model(batches, config)
+
+    def get_label_accuracies(self):
+        """Alias for ClassConditionalModel.get_accuracies()
+        :return: estimated labeling function accuracies
+        """
+        return self.get_accuracies()
+
+    def get_link_accuracies(self):
+        """Returns the model's estimated linking function accuracies
+        :return: a NumPy array with one element in [0,1] for each labeling
+                 function, representing the estimated probability that
+                 the corresponding linking function correctly identifies a pair
+                 of consecutive labels, given that it does not abstain
+        """
+        acc = self.link_accuracy.detach().numpy()
+        return np.exp(acc) / (np.exp(acc) + np.exp(-1 * acc))
+
+    def get_label_propensities(self):
+        """Alias for ClassConditionalModel.get_propensities()
+        :return: estimated labeling function propensities
+        """
+        return self.get_propensities()
+
+    def get_link_propensities(self):
+        """Returns the model's estimated linking function propensities, i.e.,
+        the probability that a linking function does not abstain
+        :return: a NumPy array with one element in [0,1] for each linking
+                 function, representing the estimated probability that
+                 the corresponding linking function does not abstain
+        """
+        prop = self.link_propensity.detach().numpy()
+        return np.exp(prop) / (np.exp(prop) + 1)
 
     def viterbi(self, votes, seq_starts):
         """
@@ -174,17 +213,21 @@ class LinkedHMM(ClassConditionalLabelModel):
             offset += len(res)
         return out
 
-    def get_label_distribution(self, votes, seq_starts):
+    def get_label_distribution(self, label_votes, link_votes, seq_starts):
         """Returns the unary and pairwise marginals over true labels estimated
         by the model.
 
-        :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
-                      lengths of the sequences in the data, n is the number of
-                      labeling functions and k is the number of classes
+        :param label_votes: m x n matrix in {0, ..., k}, where m is the sum of
+                            the lengths of the sequences in the batch, n is the
+                            number of labeling functions and k is the number of
+                            classes
+        :param link_votes: m x n matrix in {-1, 0, 1}, where m is the sum of
+                           the lengths of the sequences in the batch and n is the
+                           number of linking functions
         :param seq_starts: vector of length l of row indices in votes indicating
                            the start of each sequence, where l is the number of
-                           sequences in the batch. So, votes[seq_starts[i]] is
-                           the row vector of labeling function outputs for the
+                           sequences in the batch. So, label_votes[seq_starts[i]]
+                           is the row vector of labeling function outputs for the
                            first element in the ith sequence
         :return: p_unary, p_pairwise where p_unary is a m x k matrix representing
                  the marginal distributions over individual labels, and p_pairwise
@@ -193,44 +236,61 @@ class LinkedHMM(ClassConditionalLabelModel):
                  k x k matrix will be all zeros.
         """
         # Converts to CSR and integers to standardize input
-        votes = sparse.csr_matrix(votes, dtype=np.int)
+        label_votes = sparse.csr_matrix(label_votes, dtype=np.int)
+        link_votes = sparse.csr_matrix(link_votes, dtype=np.int)
         seq_starts = np.array(seq_starts, dtype=np.int)
 
-        out_unary = np.zeros((votes.shape[0], self.num_classes))
-        out_pairwise = np.zeros((votes.shape[0], self.num_classes, self.num_classes))
+        out_unary = np.zeros((label_votes.shape[0], self.num_classes))
+        out_pairwise = np.zeros((label_votes.shape[0], self.num_classes, self.num_classes))
 
         offset = 0
-        for votes, seq_starts in self._create_minibatches(votes, seq_starts, 32):
+        for label_votes, link_votes, seq_starts in self._create_minibatches(
+                label_votes, link_votes, seq_starts, 32):
             # Computes observation likelihoods and initializes alpha and beta messages
-            cll = self._get_labeling_function_likelihoods(votes)
-            alpha = torch.zeros(cll.shape)
-            beta = torch.zeros(cll.shape)
+            label_cll = self._get_labeling_function_likelihoods(label_votes)
+            link_cll = self._get_linking_function_likelihoods(link_votes)
+            alpha = torch.zeros(label_cll.shape)
+            beta = torch.zeros(label_cll.shape)
 
             # Computes alpha
             next_seq = 0
-            for i in range(votes.shape[0]):
+            for i in range(label_votes.shape[0]):
                 if next_seq == len(seq_starts) or i < seq_starts[next_seq]:
                     # i is not the start of a sequence
                     temp = alpha[i-1].unsqueeze(1).repeat(1, self.num_classes)
                     temp = temp + self._get_norm_transitions()
-                    alpha[i] = cll[i] + temp.logsumexp(0)
+
+                    # Adds contribution from linking functions
+                    for j in range(self.num_classes):
+                        for k in range(self.num_classes):
+                            temp[j, k] += link_cll[i, j, k]
+
+                    # Finishes computing alpha
+                    alpha[i] = label_cll[i] + temp.logsumexp(0)
                 else:
                     # i is the start of a sequence
-                    alpha[i] = cll[i] + self._get_norm_start_balance()
+                    alpha[i] = label_cll[i] + self._get_norm_start_balance()
                     next_seq += 1
 
             # Computes beta
             this_seq = seq_starts.shape[0] - 1
             beta[-1, :] = 1
-            for i in range(votes.shape[0] - 2, -1, -1):
+            for i in range(label_votes.shape[0] - 2, -1, -1):
                 if i == seq_starts[this_seq] - 1:
                     # End of sequence
                     beta[i, :] = 1
                     this_seq -= 1
                 else:
-                    temp = beta[i+1] + cll[i+1]
+                    temp = beta[i+1] + label_cll[i+1]
                     temp = temp.unsqueeze(1).repeat(1, self.num_classes)
                     temp = temp + self._get_norm_transitions()
+
+                    # Adds contribution from linking functions
+                    for j in range(self.num_classes):
+                        for k in range(self.num_classes):
+                            temp[j, k] += link_cll[i+1, j, k]
+
+                    # Finishes computing beta
                     beta[i, :] = temp.logsumexp(0)
 
             # Computes p_unary
@@ -243,11 +303,11 @@ class LinkedHMM(ClassConditionalLabelModel):
 
             # Computes p_pairwise
             p_pairwise = torch.zeros(
-                (votes.shape[0], self.num_classes, self.num_classes))
+                (label_votes.shape[0], self.num_classes, self.num_classes))
             for i in range(p_pairwise.shape[0] - 1):
                 p_pairwise[i, :, :] = self._get_norm_transitions()
                 p_pairwise[i] += alpha[i].unsqueeze(1).repeat(1, self.num_classes)
-                p_pairwise[i] += cll[i+1].unsqueeze(0).repeat(self.num_classes, 1)
+                p_pairwise[i] += label_cll[i+1].unsqueeze(0).repeat(self.num_classes, 1)
                 p_pairwise[i] += beta[i+1].unsqueeze(0).repeat(self.num_classes, 1)
 
                 denom = p_pairwise[i].view(-1).logsumexp(0)
@@ -257,7 +317,7 @@ class LinkedHMM(ClassConditionalLabelModel):
 
                 out_pairwise[offset + i, :, :] = torch.exp(p_pairwise[i]).detach()
 
-            offset += votes.shape[0]
+            offset += label_votes.shape[0]
 
         return out_unary, out_pairwise
 
@@ -298,17 +358,64 @@ class LinkedHMM(ClassConditionalLabelModel):
         seq_start_batches[-1] = np.concatenate(
             (seq_start_batches[-1], [label_votes.shape[0]]))
 
-        vote_batches = []
+        label_vote_batches = []
         for seq_start_batch in seq_start_batches:
-            vote_batches.append(
+            label_vote_batches.append(
                 sparse.coo_matrix(
-                    votes[seq_start_batch[0]:seq_start_batch[-1]], copy=True
+                    label_votes[seq_start_batch[0]:seq_start_batch[-1]], copy=True
+                )
+            )
+
+        link_vote_batches = []
+        for seq_start_batch in seq_start_batches:
+            link_vote_batches.append(
+                sparse.coo_matrix(
+                    link_votes[seq_start_batch[0]:seq_start_batch[-1]], copy=True
                 )
             )
 
         seq_start_batches = [x[:-1] - x[0] for x in seq_start_batches]
 
-        return list(zip(vote_batches, seq_start_batches))
+        return list(zip(label_vote_batches, link_vote_batches, seq_start_batches))
+
+    def _get_linking_function_likelihoods(self, votes):
+        if type(votes) != sparse.coo_matrix:
+            votes = sparse.coo_matrix(votes)
+
+        cll = torch.zeros((votes.shape[0], self.num_classes, self.num_classes))
+
+        # Initializes normalizing constants
+        z_prop = self.link_propensity.unsqueeze(1)
+        z_prop = torch.cat((z_prop, torch.zeros((self.num_linking_funcs, 1))), dim=1)
+        z_prop = torch.logsumexp(z_prop, dim=1)
+
+        z_acc = self.link_accuracy.unsqueeze(1)
+        z_acc = torch.cat((z_acc, -1 * self.link_accuracy.unsqueeze(1)), dim=1)
+        z_acc = torch.logsumexp(z_acc, dim=1)
+
+        # Subtracts normalizing constant for propensities from cll
+        # (since it applies to all outcomes)
+        cll -= torch.sum(z_prop)
+
+        # Loops over votes and classes to compute conditional log-likelihood
+        for i, j, v in zip(votes.row, votes.col, votes.data):
+            if v != 1 and v != -1:
+                continue
+
+            logp = self.link_propensity[j]
+            if v == 1:
+                logp += self.link_accuracy[j]
+            else:
+                logp -= self.link_accuracy[j]
+            logp -= z_acc[j]
+            for k1 in range(self.num_classes):
+                for k2 in range(self.num_classes):
+                    if k1 == k2:
+                        cll[i, k1, k2] += logp
+                    else:
+                        cll[i, k1, k2] -= logp
+
+        return cll
 
     def _get_norm_start_balance(self):
         return self.start_balance - self.start_balance.logsumexp(0)
