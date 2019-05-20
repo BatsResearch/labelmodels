@@ -1,4 +1,4 @@
-from labelmodels import LinkedHMM
+from labelmodels import LinkedHMM, HMM
 import numpy as np
 from scipy import sparse
 import unittest
@@ -13,31 +13,47 @@ class TestLinkedHMM(unittest.TestCase):
         pass
 
     def test_estimate_label_model_binary(self):
-        n = 5
+        n1 = 5
+        n2 = 3
         k = 2
 
-        accuracies = np.array([[.9, .8],
-                               [.6, .7],
-                               [.6, .6],
-                               [.7, .6],
-                               [.8, .8]])
-        propensities = np.array([.9] * n)
+        label_accuracies = np.array([[.9, .8],
+                                     [.6, .7],
+                                     [.6, .6],
+                                     [.7, .6],
+                                     [.8, .8]])
+        link_accuracies = np.array([.8, .6, .8])
+        label_propensities = np.array([.9] * n1)
+        link_propensities = np.array([.9] * n1)
         start_balance = np.array([.3, .7])
         transitions = np.array([[.5, .5], [.3, .7]])
 
-        labels_train, seq_starts_train, gold_train = _generate_data(
-            1000, 8, 12, n, accuracies, propensities, start_balance, transitions
+        labels, links, seq_starts, gold = _generate_data(
+            1000, 8, 12, n1, n2,
+            label_accuracies,
+            link_accuracies,
+            label_propensities,
+            link_propensities,
+            start_balance,
+            transitions
         )
 
-        model = HMM(k, n, acc_prior=0.0)
-        model.estimate_label_model(labels_train, seq_starts_train)
+        model = LinkedHMM(k, n1, n2, acc_prior=0.0)
+        model.estimate_label_model(labels, links, seq_starts)
 
-        for i in range(n):
+        for i in range(n1):
             for j in range(k):
-                diff = accuracies[i, j] - model.get_accuracies()[i, j]
+                diff = label_accuracies[i, j] - model.get_accuracies()[i, j]
                 self.assertAlmostEqual(diff, 0.0, places=1)
-        for i in range(n):
-            diff = propensities[i] - model.get_propensities()[i]
+        for i in range(n2):
+            for j in range(k):
+                diff = link_accuracies[i] - model.get_link_accuracies()[i]
+                self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(n1):
+            diff = label_propensities[i] - model.get_propensities()[i]
+            self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(n2):
+            diff = link_propensities[i] - model.get_link_propensities()[i]
             self.assertAlmostEqual(diff, 0.0, places=1)
         for i in range(k):
             diff = start_balance[i] - model.get_start_balance()[i]
@@ -48,33 +64,49 @@ class TestLinkedHMM(unittest.TestCase):
                 self.assertAlmostEqual(diff, 0.0, places=1)
 
     def test_estimate_label_model_multiclass(self):
-        n = 5
+        n1 = 5
+        n2 = 3
         k = 3
 
-        accuracies = np.array([[.9, .8, .9],
-                               [.6, .7, .9],
-                               [.6, .6, .9],
-                               [.7, .6, .9],
-                               [.8, .8, .9]])
-        propensities = np.array([.9] * n)
+        label_accuracies = np.array([[.9, .8, .5],
+                                     [.6, .7, .3],
+                                     [.6, .6, .8],
+                                     [.7, .6, .6],
+                                     [.8, .8, .9]])
+        link_accuracies = np.array([.8, .6, .8])
+        label_propensities = np.array([.9] * n1)
+        link_propensities = np.array([.9] * n1)
         start_balance = np.array([.3, .3, .4])
         transitions = np.array([[.5, .3, .2],
-                                [.3, .4, .3],
-                                [.2, .5, .3]])
+                                [.4, .3, .3],
+                                [.3, .3, .4]])
 
-        labels_train, seq_starts_train, gold_train = _generate_data(
-            1000, 8, 12, n, accuracies, propensities, start_balance, transitions
+        labels, links, seq_starts, gold = _generate_data(
+            1000, 8, 12, n1, n2,
+            label_accuracies,
+            link_accuracies,
+            label_propensities,
+            link_propensities,
+            start_balance,
+            transitions
         )
 
-        model = HMM(k, n, acc_prior=0.0)
-        model.estimate_label_model(labels_train, seq_starts_train)
+        model = LinkedHMM(k, n1, n2, acc_prior=0.0)
+        model.estimate_label_model(labels, links, seq_starts)
 
-        for i in range(n):
+        for i in range(n1):
             for j in range(k):
-                diff = accuracies[i, j] - model.get_accuracies()[i, j]
+                diff = label_accuracies[i, j] - model.get_accuracies()[i, j]
                 self.assertAlmostEqual(diff, 0.0, places=1)
-        for i in range(n):
-            diff = propensities[i] - model.get_propensities()[i]
+        for i in range(n2):
+            for j in range(k):
+                diff = link_accuracies[i] - model.get_link_accuracies()[i]
+                self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(n1):
+            diff = label_propensities[i] - model.get_propensities()[i]
+            self.assertAlmostEqual(diff, 0.0, places=1)
+        for i in range(n2):
+            diff = link_propensities[i] - model.get_link_propensities()[i]
             self.assertAlmostEqual(diff, 0.0, places=1)
         for i in range(k):
             diff = start_balance[i] - model.get_start_balance()[i]
@@ -86,32 +118,38 @@ class TestLinkedHMM(unittest.TestCase):
 
     def test_viterbi(self):
         m = 500
-        n = 10
+        n1 = 3
+        n2 = 5
         k = 3
 
-        model = HMM(k, n, acc_prior=0.0)
+        model = LinkedHMM(k, n1, n2, acc_prior=0.0)
 
         model.start_balance[0] = 0
         model.start_balance[1] = 0.5
-        for i in range(n):
-            model.propensity[i] = 2
+        for i in range(n1):
+            model.propensity[i] = 0
             for j in range(k):
-                model.accuracy[i, j] = 2
+                model.accuracy[i, j] = 1
+        for i in range(n2):
+            model.link_propensity[i] = 0
+            model.link_accuracy[i] = 1.5
         for i in range(k):
             for j in range(k):
                 model.transitions[i, j] = 1 if i == j else 0
 
-        labels_train, seq_starts_train, gold_train = _generate_data(
-            m, 8, 12, n,
-            model.get_accuracies(),
-            model.get_propensities(),
+        labels, links, seq_starts, gold = _generate_data(
+            m, 8, 12, n1, n2,
+            model.get_label_accuracies(),
+            model.get_link_accuracies(),
+            model.get_label_propensities(),
+            model.get_link_propensities(),
             model.get_start_balance(),
             model.get_transition_matrix())
 
-        predictions = model.viterbi(labels_train, seq_starts_train)
+        predictions = model.viterbi(labels, links, seq_starts)
         correct = 0
         for i in range(len(predictions)):
-            if predictions[i] == gold_train[i]:
+            if predictions[i] == gold[i]:
                 correct += 1
         accuracy = correct / float(len(predictions))
         self.assertGreaterEqual(accuracy, .95)
@@ -132,7 +170,7 @@ class TestLinkedHMM(unittest.TestCase):
                 model.accuracy[i, j] = 1
         for i in range(n2):
             model.link_propensity[i] = 0
-            model.link_accuracy[i] = 1
+            model.link_accuracy[i] = 1.5
         for i in range(k):
             for j in range(k):
                 model.transitions[i, j] = 1 if i == j else 0
@@ -168,8 +206,7 @@ class TestLinkedHMM(unittest.TestCase):
         pred_pairwise += 1
 
         # Checks that predictions are accurate
-        for predictions in (pred_unary,):
-        #for predictions in (pred_unary, pred_pairwise):
+        for predictions in (pred_unary, pred_pairwise):
             correct = 0
             for i in range(len(predictions)):
                 if predictions[i] == gold[i]:

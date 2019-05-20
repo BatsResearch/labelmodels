@@ -61,13 +61,13 @@ class HMM(ClassConditionalLabelModel):
         norm_transitions = self._get_norm_transitions()
         for i in range(0, votes.shape[0]):
             if i in seq_starts:
-                jll[i, :] = jll[i, :] + norm_start_balance
+                jll[i] += norm_start_balance
             else:
-                joint_class_pair = jll[i - 1, :].clone().unsqueeze(1)
+                joint_class_pair = jll[i-1, :].clone().unsqueeze(1)
                 joint_class_pair = joint_class_pair.repeat(1, self.num_classes)
-                joint_class_pair = joint_class_pair + norm_transitions
-                marginal_current_class = joint_class_pair.logsumexp(0)
-                jll[i, :] = jll[i, :] + marginal_current_class
+                joint_class_pair += norm_transitions
+
+                jll[i] += joint_class_pair.logsumexp(0)
         seq_ends = [x - 1 for x in seq_starts] + [votes.shape[0]-1]
         seq_ends.remove(-1)
         mll = torch.logsumexp(jll[seq_ends], dim=1)
@@ -136,11 +136,11 @@ class HMM(ClassConditionalLabelModel):
             bt = torch.zeros([T, self.num_classes])
             for i in range(0, T):
                 if i in seq_starts:
-                    jll[i, :] += norm_start_balance
+                    jll[i] += norm_start_balance
                 else:
-                    p = jll[i-1, :].clone().unsqueeze(1).repeat(
+                    p = jll[i-1].clone().unsqueeze(1).repeat(
                         1, self.num_classes) + norm_transitions
-                    jll[i, :] += torch.max(p, dim=0)[0]
+                    jll[i] += torch.max(p, dim=0)[0]
                     bt[i, :] = torch.argmax(p, dim=0)
 
             seq_ends = [x - 1 for x in seq_starts] + [votes.shape[0] - 1]
