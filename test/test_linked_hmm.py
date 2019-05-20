@@ -1,4 +1,4 @@
-from labelmodels import LinkedHMM, HMM
+from labelmodels import LinkedHMM, LearningConfig
 import numpy as np
 from scipy import sparse
 import unittest
@@ -39,7 +39,9 @@ class TestLinkedHMM(unittest.TestCase):
         )
 
         model = LinkedHMM(k, n1, n2, acc_prior=0.0)
-        model.estimate_label_model(labels, links, seq_starts)
+        config = LearningConfig()
+        config.epochs = 3
+        model.estimate_label_model(labels, links, seq_starts, config=config)
 
         for i in range(n1):
             for j in range(k):
@@ -92,7 +94,9 @@ class TestLinkedHMM(unittest.TestCase):
         )
 
         model = LinkedHMM(k, n1, n2, acc_prior=0.0)
-        model.estimate_label_model(labels, links, seq_starts)
+        config = LearningConfig()
+        config.epochs = 3
+        model.estimate_label_model(labels, links, seq_starts, config=config)
 
         for i in range(n1):
             for j in range(k):
