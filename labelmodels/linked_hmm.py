@@ -441,3 +441,12 @@ class LinkedHMM(ClassConditionalLabelModel):
     def _get_norm_transitions(self):
         denom = self.transitions.logsumexp(1).unsqueeze(1).repeat(1, self.num_classes)
         return self.transitions - denom
+
+    def _get_regularization_loss(self):
+        """Computes the regularization loss of the model:
+        acc_prior * \|accuracy - init_acc\|_2
+
+        :return: value of regularization loss
+        """
+        acc = torch.cat((self.accuracy.view(-1), self.link_accuracy))
+        return self.acc_prior * torch.norm(acc - self.init_acc)
