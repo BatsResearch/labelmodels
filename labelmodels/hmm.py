@@ -17,7 +17,8 @@ class HMM(ClassConditionalLabelModel):
     for Computational Linguistics, 2017.
     """
 
-    def __init__(self, num_classes, num_lfs, init_acc=.9, acc_prior=.025):
+    def __init__(self, num_classes, num_lfs, init_acc=.9, acc_prior=1,
+                 balance_prior=1):
         """Constructor.
 
         Initializes labeling function accuracies using optional argument and all
@@ -35,6 +36,8 @@ class HMM(ClassConditionalLabelModel):
 
         self.start_balance = nn.Parameter(torch.zeros([num_classes]))
         self.transitions = nn.Parameter(torch.zeros([num_classes, num_classes]))
+
+        self.balance_prior = balance_prior
 
     def forward(self, votes, seq_starts):
         """
@@ -105,9 +108,9 @@ class HMM(ClassConditionalLabelModel):
 
         self._do_estimate_label_model(batches, config)
 
-    def viterbi(self, votes, seq_starts):
+    def get_most_probable_labels(self, votes, seq_starts):
         """
-        Computes the most probable underlying sequence nodes given function
+        Computes the most probable underlying sequence of labels given function
         outputs
 
         :param votes: m x n matrix in {0, ..., k}, where m is the sum of the
@@ -291,6 +294,26 @@ class HMM(ClassConditionalLabelModel):
         seq_start_batches = [x[:-1] - x[0] for x in seq_start_batches]
 
         return list(zip(vote_batches, seq_start_batches))
+
+    def _get_regularization_loss(self):
+        neg_entropy = 0.0
+
+        # Start balance
+        norm_start_balance = self._get_norm_start_balance()
+        exp_class_balance = torch.exp(norm_start_balance)
+        for k in range(self.num_classes):
+            neg_entropy += norm_start_balance[k] * exp_class_balance[k]
+
+        # Transitions
+        norm_transitions = self._get_norm_transitions()
+        for i in range(self.num_classes):
+            exp_transitions = torch.exp(norm_transitions[i])
+            for k in range(self.num_classes):
+                neg_entropy += norm_transitions[i, k] * exp_transitions[k]
+
+        entropy_prior = self.balance_prior * neg_entropy
+
+        return super()._get_regularization_loss() + entropy_prior
 
     def _get_norm_start_balance(self):
         return self.start_balance - self.start_balance.logsumexp(0)

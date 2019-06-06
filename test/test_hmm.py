@@ -29,7 +29,7 @@ class TestHMM(unittest.TestCase):
             1000, 8, 12, n, accuracies, propensities, start_balance, transitions
         )
 
-        model = HMM(k, n, acc_prior=0.0)
+        model = HMM(k, n, acc_prior=0.0, balance_prior=0.0)
         model.estimate_label_model(labels_train, seq_starts_train)
 
         for i in range(n):
@@ -66,7 +66,7 @@ class TestHMM(unittest.TestCase):
             1000, 8, 12, n, accuracies, propensities, start_balance, transitions
         )
 
-        model = HMM(k, n, acc_prior=0.0)
+        model = HMM(k, n, acc_prior=0.0, balance_prior=0.0)
         model.estimate_label_model(labels_train, seq_starts_train)
 
         for i in range(n):
@@ -84,7 +84,7 @@ class TestHMM(unittest.TestCase):
                 diff = transitions[i, j] - model.get_transition_matrix()[i, j]
                 self.assertAlmostEqual(diff, 0.0, places=1)
 
-    def test_viterbi(self):
+    def test_get_most_probable_labels(self):
         m = 500
         n = 10
         k = 3
@@ -108,7 +108,7 @@ class TestHMM(unittest.TestCase):
             model.get_start_balance(),
             model.get_transition_matrix())
 
-        predictions = model.viterbi(labels_train, seq_starts_train)
+        predictions = model.get_most_probable_labels(labels_train, seq_starts_train)
         correct = 0
         for i in range(len(predictions)):
             if predictions[i] == gold_train[i]:
