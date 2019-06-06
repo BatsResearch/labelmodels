@@ -133,7 +133,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         seq_starts = np.array(seq_starts, dtype=np.int)
 
         batches = self._create_minibatches(
-            label_votes, link_votes, seq_starts, config.batch_size)
+            label_votes, link_votes, seq_starts, config.batch_size, shuffle_seqs=True)
 
         self._do_estimate_label_model(batches, config)
 
@@ -357,37 +357,57 @@ class LinkedHMM(ClassConditionalLabelModel):
             raise ValueError("label_votes and link_votes must have same number "
                              "of rows")
 
-        # TODO: shuffle sequences
-        if shuffle_seqs:
-            raise ValueError("Shuffling not implemented.")
+        # Computes explicit seq ends so that we can shuffle the sequences
+        seq_ends = np.ndarray((seq_starts.shape[0],), dtype=np.int)
+        for i in range(1, seq_starts.shape[0]):
+            seq_ends[i - 1] = seq_starts[i] - 1
+        seq_ends[-1] = label_votes.shape[0] - 1
 
+        # Shuffles the sequences by shuffling the start and end index vectors
+        if shuffle_seqs:
+            index = np.arange(np.shape(seq_starts)[0])
+            np.random.shuffle(index)
+            seq_starts = seq_starts[index]
+            seq_ends = seq_ends[index]
+
+        # Splits seq_starts
         seq_start_batches = [np.array(
-            seq_starts[i * batch_size: ((i + 1) * batch_size + 1)],
+            seq_starts[i * batch_size: ((i + 1) * batch_size)],
             copy=True)
             for i in range(int(np.ceil(len(seq_starts) / batch_size)))
         ]
-        seq_start_batches[-1] = np.concatenate(
-            (seq_start_batches[-1], [label_votes.shape[0]]))
+        seq_start_batches[-1] = np.concatenate((seq_start_batches[-1],
+                                                [label_votes.shape[0]]))
 
+        # Splits seq_ends
+        seq_end_batches = [
+            np.array(seq_ends[i * batch_size: ((i + 1) * batch_size + 1)], copy=True)
+            for i in range(int(np.ceil(len(seq_ends) / batch_size)))
+        ]
+        seq_end_batches[-1] = np.concatenate((seq_end_batches[-1],
+                                              [label_votes.shape[0]]))
+
+        # Builds label_vote_batches, link_vote_batches and relative seq_start_batches
         label_vote_batches = []
-        for seq_start_batch in seq_start_batches:
-            label_vote_batches.append(
-                sparse.coo_matrix(
-                    label_votes[seq_start_batch[0]:seq_start_batch[-1]], copy=True
-                )
-            )
-
         link_vote_batches = []
-        for seq_start_batch in seq_start_batches:
+        rel_seq_start_batches = []
+        for seq_start_batch, seq_end_batch in zip(seq_start_batches, seq_end_batches):
+            label_vote_batch = []
+            link_vote_batch = []
+            rel_seq_start_batch = np.zeros((len(seq_start_batch),), dtype=np.int)
+            total_len = 0
+            for i, (start, end) in enumerate(zip(seq_start_batch, seq_end_batch)):
+                label_vote_batch.append(label_votes[start:end + 1])
+                link_vote_batch.append(link_votes[start:end + 1])
+                rel_seq_start_batch[i] = total_len
+                total_len += end - start + 1
+            label_vote_batches.append(
+                sparse.coo_matrix(sparse.vstack(label_vote_batch), copy=True))
             link_vote_batches.append(
-                sparse.coo_matrix(
-                    link_votes[seq_start_batch[0]:seq_start_batch[-1]], copy=True
-                )
-            )
+                sparse.coo_matrix(sparse.vstack(link_vote_batch), copy=True))
+            rel_seq_start_batches.append(rel_seq_start_batch)
 
-        seq_start_batches = [x[:-1] - x[0] for x in seq_start_batches]
-
-        return list(zip(label_vote_batches, link_vote_batches, seq_start_batches))
+        return list(zip(label_vote_batches, link_vote_batches, rel_seq_start_batches))
 
     def _get_linking_function_likelihoods(self, votes):
         if type(votes) != sparse.coo_matrix:
