@@ -38,7 +38,7 @@ class TestLinkedHMM(unittest.TestCase):
             transitions
         )
 
-        model = LinkedHMM(k, n1, n2, acc_prior=0.0)
+        model = LinkedHMM(k, n1, n2, acc_prior=0.0, balance_prior=0.0)
         config = LearningConfig()
         config.epochs = 3
         model.estimate_label_model(labels, links, seq_starts, config=config)
@@ -93,9 +93,9 @@ class TestLinkedHMM(unittest.TestCase):
             transitions
         )
 
-        model = LinkedHMM(k, n1, n2, acc_prior=0.0)
+        model = LinkedHMM(k, n1, n2, acc_prior=0.0, balance_prior=0.0)
         config = LearningConfig()
-        config.epochs = 3
+        config.epochs = 4
         model.estimate_label_model(labels, links, seq_starts, config=config)
 
         for i in range(n1):
@@ -120,13 +120,13 @@ class TestLinkedHMM(unittest.TestCase):
                 diff = transitions[i, j] - model.get_transition_matrix()[i, j]
                 self.assertAlmostEqual(diff, 0.0, places=1)
 
-    def test_viterbi(self):
+    def test_get_most_probable_labels(self):
         m = 500
         n1 = 3
         n2 = 5
         k = 3
 
-        model = LinkedHMM(k, n1, n2, acc_prior=0.0)
+        model = LinkedHMM(k, n1, n2)
 
         model.start_balance[0] = 0
         model.start_balance[1] = 0.5
@@ -150,7 +150,7 @@ class TestLinkedHMM(unittest.TestCase):
             model.get_start_balance(),
             model.get_transition_matrix())
 
-        predictions = model.viterbi(labels, links, seq_starts)
+        predictions = model.get_most_probable_labels(labels, links, seq_starts)
         correct = 0
         for i in range(len(predictions)):
             if predictions[i] == gold[i]:
@@ -164,7 +164,7 @@ class TestLinkedHMM(unittest.TestCase):
         n2 = 5
         k = 3
 
-        model = LinkedHMM(k, n1, n2, acc_prior=0.0)
+        model = LinkedHMM(k, n1, n2)
 
         model.start_balance[0] = 0
         model.start_balance[1] = 0.5

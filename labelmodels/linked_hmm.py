@@ -26,7 +26,7 @@ class LinkedHMM(ClassConditionalLabelModel):
     """
 
     def __init__(self, num_classes, num_labeling_funcs, num_linking_funcs,
-                 init_acc=.9, acc_prior=.025):
+                 init_acc=.9, acc_prior=1, balance_prior=1):
         """Constructor.
 
         Initializes labeling and linking function accuracies using optional
@@ -51,6 +51,7 @@ class LinkedHMM(ClassConditionalLabelModel):
 
         # Saves state
         self.num_linking_funcs = num_linking_funcs
+        self.balance_prior = balance_prior
 
     def forward(self, label_votes, link_votes, seq_starts):
         """
@@ -168,7 +169,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         prop = self.link_propensity.detach().numpy()
         return np.exp(prop) / (np.exp(prop) + 1)
 
-    def viterbi(self, label_votes, link_votes, seq_starts):
+    def get_most_probable_labels(self, label_votes, link_votes, seq_starts):
         """
         Computes the most probable underlying sequence nodes given function
         outputs
@@ -435,18 +436,33 @@ class LinkedHMM(ClassConditionalLabelModel):
 
         return cll
 
+    def _get_regularization_loss(self):
+        neg_entropy = 0.0
+
+        # Start balance
+        norm_start_balance = self._get_norm_start_balance()
+        exp_class_balance = torch.exp(norm_start_balance)
+        for k in range(self.num_classes):
+            neg_entropy += norm_start_balance[k] * exp_class_balance[k]
+
+        # Transitions
+        norm_transitions = self._get_norm_transitions()
+        for i in range(self.num_classes):
+            exp_transitions = torch.exp(norm_transitions[i])
+            for k in range(self.num_classes):
+                neg_entropy += norm_transitions[i, k] * exp_transitions[k]
+
+        entropy_prior = self.balance_prior * neg_entropy
+
+        # Accuracy prior
+        acc = torch.cat((self.accuracy.view(-1), self.link_accuracy))
+        acc_prior = self.acc_prior * torch.norm(acc - self.init_acc)
+
+        return acc_prior + entropy_prior
+
     def _get_norm_start_balance(self):
         return self.start_balance - self.start_balance.logsumexp(0)
 
     def _get_norm_transitions(self):
         denom = self.transitions.logsumexp(1).unsqueeze(1).repeat(1, self.num_classes)
         return self.transitions - denom
-
-    def _get_regularization_loss(self):
-        """Computes the regularization loss of the model:
-        acc_prior * \|accuracy - init_acc\|_2
-
-        :return: value of regularization loss
-        """
-        acc = torch.cat((self.accuracy.view(-1), self.link_accuracy))
-        return self.acc_prior * torch.norm(acc - self.init_acc)
