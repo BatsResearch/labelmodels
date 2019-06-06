@@ -42,6 +42,14 @@ class LabelModel(nn.Module):
         """
         raise NotImplementedError
 
+    def get_most_probable_labels(self, *args):
+        """Returns the most probable true labels given observed function outputs.
+
+        :param args: observed function outputs and related metadata
+        :return: 1-d Numpy array of most probable labels
+        """
+        raise NotImplementedError
+
     def _do_estimate_label_model(self, batches, config):
         """Internal method for optimizing model parameters.
 
@@ -72,7 +80,6 @@ class LabelModel(nn.Module):
             running_loss = 0.0
 
             # Iterates over training data
-            i_batch = 0
             for i_batch, inputs in enumerate(batches):
                 optimizer.zero_grad()
                 log_likelihood = self(*inputs)
@@ -81,7 +88,7 @@ class LabelModel(nn.Module):
                 loss.backward()
                 optimizer.step()
                 running_loss += loss
-            epoch_loss = running_loss / (i_batch + 1)
+            epoch_loss = running_loss / len(batches)
             logging.info('Train Loss: %.6f', epoch_loss)
 
     def _get_regularization_loss(self):
@@ -216,10 +223,10 @@ class LearningConfig(object):
         """Initializes all hyperparameters to default values"""
         self.epochs = 5
         self.batch_size = 64
-        self.step_size = 0.1
+        self.step_size = 0.01
         self.step_schedule = None
         self.step_size_mult = None
-        self.momentum = 0.0
+        self.momentum = 0.9
         self.random_seed = 0
 
 

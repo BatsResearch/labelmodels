@@ -27,7 +27,7 @@ class TestNaiveBayes(unittest.TestCase):
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = NaiveBayes(2, n, learn_class_balance=True, acc_prior=0.0)
+        model = NaiveBayes(2, n, acc_prior=0.0, balance_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for j in range(n):
@@ -55,7 +55,7 @@ class TestNaiveBayes(unittest.TestCase):
         labels_train, gold_train = _generate_data(
             m, n, accuracies, propensities, class_balance)
 
-        model = NaiveBayes(3, n, learn_class_balance=True, acc_prior=0.0)
+        model = NaiveBayes(3, n, acc_prior=0.0, balance_prior=0.0)
         model.estimate_label_model(labels_train)
 
         for j in range(n):
@@ -69,12 +69,12 @@ class TestNaiveBayes(unittest.TestCase):
             diff = class_balance[k] - model.get_class_balance()[k]
             self.assertAlmostEqual(diff, 0.0, places=1)
 
-    def test_get_label_distribution_binary(self):
+    def test_get_most_probable_labels_binary(self):
         m = 10000
         n = 5
         k = 2
 
-        model = NaiveBayes(k, n, learn_class_balance=True, acc_prior=0.0)
+        model = NaiveBayes(k, n)
 
         model.class_balance[0] = 0
         model.class_balance[1] = 0.5
@@ -90,20 +90,20 @@ class TestNaiveBayes(unittest.TestCase):
             model.get_class_balance())
 
         # Checks label inference
-        labels = model.get_label_distribution(labels_train)
+        labels = model.get_most_probable_labels(labels_train)
         correct = 0
         for i in range(m):
-            if gold_train[i] == np.argmax(labels[i, :]) + 1:
+            if gold_train[i] == labels[i]:
                 correct += 1
 
         self.assertGreater(float(correct) / m, .95)
 
-    def test_get_label_distribution_multiclass(self):
+    def test_get_most_probable_labels_multiclass(self):
         m = 10000
         n = 5
         k = 3
 
-        model = NaiveBayes(k, n, learn_class_balance=True, acc_prior=0.0)
+        model = NaiveBayes(k, n)
 
         model.class_balance[0] = 0
         model.class_balance[1] = 0.5
@@ -120,10 +120,10 @@ class TestNaiveBayes(unittest.TestCase):
             model.get_class_balance())
 
         # Checks label inference
-        labels = model.get_label_distribution(labels_train)
+        labels = model.get_most_probable_labels(labels_train)
         correct = 0
         for i in range(m):
-            if gold_train[i] == np.argmax(labels[i, :]) + 1:
+            if gold_train[i] == labels[i]:
                 correct += 1
 
         self.assertGreater(float(correct) / m, .95)

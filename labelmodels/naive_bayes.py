@@ -20,7 +20,7 @@ class NaiveBayes(ClassConditionalLabelModel):
     """
 
     def __init__(self, num_classes, num_lfs, init_acc=.9, acc_prior=0.025,
-                 learn_class_balance=True):
+                 balance_prior=0.025, learn_class_balance=True):
         """Constructor.
 
         Initializes labeling function accuracies using optional argument and all
@@ -38,9 +38,10 @@ class NaiveBayes(ClassConditionalLabelModel):
                                     uniform (False)
         """
         super().__init__(num_classes, num_lfs, init_acc, acc_prior)
-
         self.class_balance = nn.Parameter(
             torch.zeros([num_classes]), requires_grad=learn_class_balance)
+
+        self.balance_prior = balance_prior
 
     def forward(self, votes):
         """Computes log likelihood of labeling function outputs for each
@@ -114,6 +115,16 @@ class NaiveBayes(ClassConditionalLabelModel):
 
         return labels
 
+    def get_most_probable_labels(self, votes):
+        """Returns the most probable true labels given observed function outputs.
+
+        :param votes: m x n matrix in {0, ..., k}, where m is the batch size,
+                      n is the number of labeling functions and k is the number
+                      of classes
+        :return: 1-d Numpy array of most probable labels
+        """
+        return np.argmax(self.get_label_distribution(votes), axis=1) + 1
+
     def get_class_balance(self):
         """Returns the model's estimated class balance
 
@@ -137,6 +148,16 @@ class NaiveBayes(ClassConditionalLabelModel):
         ]
 
         return batches
+
+    def _get_regularization_loss(self):
+        neg_entropy = 0.0
+        norm_class_balance = self._get_norm_class_balance()
+        exp_class_balance = torch.exp(norm_class_balance)
+        for k in range(self.num_classes):
+            neg_entropy += norm_class_balance[k] * exp_class_balance[k]
+        entropy_prior = self.balance_prior * neg_entropy
+
+        return super()._get_regularization_loss() + entropy_prior
 
     def _get_norm_class_balance(self):
         return self.class_balance - torch.logsumexp(self.class_balance, dim=0)
