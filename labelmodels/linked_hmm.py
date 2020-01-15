@@ -23,6 +23,10 @@ class LinkedHMM(ClassConditionalLabelModel):
     The link matrix always has a row of 0 corresponding to the first element in
     each sequence in the data, because linking functions operate on pairs of
     elements. This does not count as an abstention.
+
+    Proposed for weakly supervised sequence tagging: E. Safranchik, S. Luo,
+    and S. H. Bach. Weakly Supervised Sequence Tagging from Noisy Rules.
+    In 34th AAAI Conference On Artificial Intelligence, 2020.
     """
 
     def __init__(self, num_classes, num_labeling_funcs, num_linking_funcs,
