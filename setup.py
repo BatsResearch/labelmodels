@@ -1,7 +1,7 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='LabelModels',
+    name='labelmodels',
     version='0.0.1',
     url='https://github.com/BatsResearch/labelmodels.git',
     author='Shiying Luo, Stephen Bach',
