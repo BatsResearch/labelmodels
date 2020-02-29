@@ -4,6 +4,8 @@ from scipy import sparse
 import torch
 import torch.nn as nn
 
+log = logging.getLogger(__name__)
+
 
 class LabelModel(nn.Module):
     """Parent class for all generative label models.
@@ -71,7 +73,7 @@ class LabelModel(nn.Module):
 
         # Iterates over epochs
         for epoch in range(config.epochs):
-            logging.info('Epoch {}/{}'.format(epoch + 1, config.epochs))
+            log.info('Epoch {}/{}'.format(epoch + 1, config.epochs))
             if scheduler is not None:
                 scheduler.step()
 
@@ -89,7 +91,7 @@ class LabelModel(nn.Module):
                 optimizer.step()
                 running_loss += loss
             epoch_loss = running_loss / len(batches)
-            logging.info('Train Loss: %.6f', epoch_loss)
+            log.info('Train Loss: %.6f', epoch_loss)
 
     def _get_regularization_loss(self):
         """Gets the value of the regularization loss for the current values of
@@ -242,4 +244,4 @@ def init_random(seed):
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
-    logging.info("Random seed: %d", seed)
+    log.info("Random seed: %d", seed)

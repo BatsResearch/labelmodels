@@ -66,7 +66,7 @@ class NaiveBayes(ClassConditionalLabelModel):
         """Estimates the parameters of the label model based on observed
         labeling function outputs.
 
-        :param votes: m x n matrix in {0, ..., k}, where m is the batch size,
+        :param votes: m x n matrix in {0, ..., k}, where m is the dataset size,
                       n is the number of labeling functions and k is the number
                       of classes
         :param config: optional LearningConfig instance. If None, initialized
