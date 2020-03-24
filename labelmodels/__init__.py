@@ -1,3 +1,4 @@
+from .attributes import AttributeLabelModel
 from .hmm import HMM
 from .label_model import LearningConfig
 from .linked_hmm import LinkedHMM
