@@ -175,19 +175,17 @@ class AttributeLabelModel(LabelModel):
                 cll[i] += self.specificity[j, num_votes - 1]
 
                 if num_votes < self.num_classes:
-                    for k in range(self.num_classes):
-                        if votes[i, j, k] == 1:
-                            logp = self.accuracy[j, k] - z_acc[j, k]
-                            constant = comb(self.num_classes - 1, num_votes - 1)
-                            logp -= torch.log(torch.tensor(constant))
-                            cll[i, k] += logp
-                        elif votes[i, j, k] == 0:
-                            logp = -1 * self.accuracy[j, k] - z_acc[j, k]
-                            constant = comb(self.num_classes - 1, num_votes)
-                            logp -= torch.log(torch.tensor(constant))
-                            cll[i, k] += logp
-                        else:
-                            raise ValueError("Illegal entry in votes tensor.")
+                    logp = self.accuracy[j] - z_acc[j]
+                    constant = comb(self.num_classes - 1, num_votes - 1)
+                    logp -= torch.log(torch.tensor(constant))
+                    pos_votes = votes[i, j, :].float() * logp
+
+                    logp = -1 * self.accuracy[j] - z_acc[j]
+                    constant = comb(self.num_classes - 1, num_votes)
+                    logp -= torch.log(torch.tensor(constant))
+                    neg_votes = (1 - votes[i, j, :]).float() * logp
+
+                    cll[i] += pos_votes + neg_votes
 
         return cll
 
@@ -198,7 +196,7 @@ class AttributeLabelModel(LabelModel):
             votes = votes[index, :, :]
 
         # Creates minibatches
-        batches = [(votes[i * batch_size: (i + 1) * batch_size, :, :],)
+        batches = [(torch.tensor(votes[i * batch_size: (i + 1) * batch_size, :, :]),)
                    for i in range(int(np.ceil(votes.shape[0] / batch_size)))
                    ]
 
