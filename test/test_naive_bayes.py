@@ -2,6 +2,7 @@ from labelmodels import NaiveBayes
 import numpy as np
 from scipy import sparse
 import test.util as util
+import torch
 import unittest
 
 
@@ -75,13 +76,13 @@ class TestNaiveBayes(unittest.TestCase):
         k = 2
 
         model = NaiveBayes(k, n)
-
-        model.class_balance[0] = 0
-        model.class_balance[1] = 0.5
-        for i in range(n):
-            model.propensity[i] = 2
-            for j in range(k):
-                model.accuracy[i, j] = 2
+        with torch.no_grad():
+            model.class_balance[0] = 0
+            model.class_balance[1] = 0.5
+            for i in range(n):
+                model.propensity[i] = 2
+                for j in range(k):
+                    model.accuracy[i, j] = 2
 
         labels_train, gold_train = _generate_data(
             m, n,
@@ -104,14 +105,14 @@ class TestNaiveBayes(unittest.TestCase):
         k = 3
 
         model = NaiveBayes(k, n)
-
-        model.class_balance[0] = 0
-        model.class_balance[1] = 0.5
-        model.class_balance[2] = 0.5
-        for i in range(n):
-            model.propensity[i] = 2
-            for j in range(k):
-                model.accuracy[i, j] = 2
+        with torch.no_grad():
+            model.class_balance[0] = 0
+            model.class_balance[1] = 0.5
+            model.class_balance[2] = 0.5
+            for i in range(n):
+                model.propensity[i] = 2
+                for j in range(k):
+                    model.accuracy[i, j] = 2
 
         labels_train, gold_train = _generate_data(
             m, n,
