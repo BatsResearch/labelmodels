@@ -87,7 +87,7 @@ class LabelModel(nn.Module):
                 loss += self._get_regularization_loss()
                 loss.backward()
                 optimizer.step()
-                running_loss += loss
+                running_loss += loss.item()
             epoch_loss = running_loss / len(batches)
             logging.info('Train Loss: %.6f', epoch_loss)
 

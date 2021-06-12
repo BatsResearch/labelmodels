@@ -9,5 +9,5 @@ setup(
     description='Lightweight implementations of generative label models for '
                 'weakly supervised machine learning',
     packages=find_packages(),
-    install_requires=['numpy >= 1.11', 'scipy >= 1.1', 'torch >= 0.4'],
+    install_requires=['numpy >= 1.11', 'scipy >= 1.1', 'torch >= 1.4'],
 )
