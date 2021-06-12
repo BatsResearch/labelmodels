@@ -1,6 +1,7 @@
 from labelmodels import HMM
 import numpy as np
 from scipy import sparse
+import torch
 import unittest
 
 
@@ -90,16 +91,16 @@ class TestHMM(unittest.TestCase):
         k = 3
 
         model = HMM(k, n, acc_prior=0.0)
-
-        model.start_balance[0] = 0
-        model.start_balance[1] = 0.5
-        for i in range(n):
-            model.propensity[i] = 2
-            for j in range(k):
-                model.accuracy[i, j] = 2
-        for i in range(k):
-            for j in range(k):
-                model.transitions[i, j] = 1 if i == j else 0
+        with torch.no_grad():
+            model.start_balance[0] = 0
+            model.start_balance[1] = 0.5
+            for i in range(n):
+                model.propensity[i] = 2
+                for j in range(k):
+                    model.accuracy[i, j] = 2
+            for i in range(k):
+                for j in range(k):
+                    model.transitions[i, j] = 1 if i == j else 0
 
         labels_train, seq_starts_train, gold_train = _generate_data(
             m, 8, 12, n,
@@ -122,16 +123,16 @@ class TestHMM(unittest.TestCase):
         k = 3
 
         model = HMM(k, n, acc_prior=0.0)
-
-        model.start_balance[0] = 0
-        model.start_balance[1] = 0.5
-        for i in range(n):
-            model.propensity[i] = 2
-            for j in range(k):
-                model.accuracy[i, j] = 2
-        for i in range(k):
-            for j in range(k):
-                model.transitions[i, j] = 1 if i == j else 0
+        with torch.no_grad():
+            model.start_balance[0] = 0
+            model.start_balance[1] = 0.5
+            for i in range(n):
+                model.propensity[i] = 2
+                for j in range(k):
+                    model.accuracy[i, j] = 2
+            for i in range(k):
+                for j in range(k):
+                    model.transitions[i, j] = 1 if i == j else 0
 
         labels_train, seq_starts_train, gold_train = _generate_data(
             m, 8, 12, n,

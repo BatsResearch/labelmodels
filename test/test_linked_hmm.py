@@ -1,6 +1,7 @@
 from labelmodels import LinkedHMM, LearningConfig
 import numpy as np
 from scipy import sparse
+import torch
 import unittest
 
 
@@ -127,19 +128,19 @@ class TestLinkedHMM(unittest.TestCase):
         k = 3
 
         model = LinkedHMM(k, n1, n2)
-
-        model.start_balance[0] = 0
-        model.start_balance[1] = 0.5
-        for i in range(n1):
-            model.propensity[i] = 0
-            for j in range(k):
-                model.accuracy[i, j] = 1
-        for i in range(n2):
-            model.link_propensity[i] = 0
-            model.link_accuracy[i] = 1.5
-        for i in range(k):
-            for j in range(k):
-                model.transitions[i, j] = 1 if i == j else 0
+        with torch.no_grad():
+            model.start_balance[0] = 0
+            model.start_balance[1] = 0.5
+            for i in range(n1):
+                model.propensity[i] = 0
+                for j in range(k):
+                    model.accuracy[i, j] = 1
+            for i in range(n2):
+                model.link_propensity[i] = 0
+                model.link_accuracy[i] = 1.5
+            for i in range(k):
+                for j in range(k):
+                    model.transitions[i, j] = 1 if i == j else 0
 
         labels, links, seq_starts, gold = _generate_data(
             m, 8, 12, n1, n2,
@@ -165,19 +166,19 @@ class TestLinkedHMM(unittest.TestCase):
         k = 3
 
         model = LinkedHMM(k, n1, n2)
-
-        model.start_balance[0] = 0
-        model.start_balance[1] = 0.5
-        for i in range(n1):
-            model.propensity[i] = 0
-            for j in range(k):
-                model.accuracy[i, j] = 1
-        for i in range(n2):
-            model.link_propensity[i] = 0
-            model.link_accuracy[i] = 1.5
-        for i in range(k):
-            for j in range(k):
-                model.transitions[i, j] = 1 if i == j else 0
+        with torch.no_grad():
+            model.start_balance[0] = 0
+            model.start_balance[1] = 0.5
+            for i in range(n1):
+                model.propensity[i] = 0
+                for j in range(k):
+                    model.accuracy[i, j] = 1
+            for i in range(n2):
+                model.link_propensity[i] = 0
+                model.link_accuracy[i] = 1.5
+            for i in range(k):
+                for j in range(k):
+                    model.transitions[i, j] = 1 if i == j else 0
 
         labels, links, seq_starts, gold = _generate_data(
             m, 8, 12, n1, n2,
