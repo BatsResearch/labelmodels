@@ -1,4 +1,4 @@
-from labelmodels import NPLM
+from labelmodels import PartialLabelModel
 import numpy as np
 from scipy import sparse
 import test.util as util
@@ -26,7 +26,7 @@ class LMTask:
     def __init__(self, name, num_classes, fid2clusters, preset_cb=None, device='cuda:0'):
         self.name = name
 
-        self.labelmodel = NPLM(num_classes=num_classes,
+        self.labelmodel = PartialLabelModel(num_classes=num_classes,
                                fid2clusters=fid2clusters,
                                preset_cb=preset_cb,
                                device=device)
@@ -102,9 +102,9 @@ def actual_cb(gold):
     return counts / sum(counts)
 
 
-class TestNPLM(unittest.TestCase):
+class TestPartialLabelModel(unittest.TestCase):
     def test_general_accuracy_recovery_0(self):
-        print('Testing Accuracy Recovery Rate for GenLM - 0')
+        print('Testing Accuracy Recovery Rate for PLM - 0')
         true_cb_0 = [1 / 3, 1 / 3, 1 / 3]
         true_acc_0 = np.array(
             [[.8, .7, .6],
@@ -134,7 +134,7 @@ class TestNPLM(unittest.TestCase):
         self.assertTrue(close_estimation(cb_0, true_cb_0))
 
     def test_general_accuracy_recovery_1(self):
-        print('Testing Accuracy Recovery Rate for GenLM - 1')
+        print('Testing Accuracy Recovery Rate for PLM - 1')
         true_cb_1 = [.5, .3, .2]
         true_acc_1 = np.array(
             [[.8, .7, .6],
@@ -163,7 +163,7 @@ class TestNPLM(unittest.TestCase):
         self.assertTrue(close_estimation(cb_1, true_cb_1))
 
     def test_general_accuracy_recovery_2(self):
-        print('Testing Accuracy Recovery Rate for GenLM - 2')
+        print('Testing Accuracy Recovery Rate for PLM - 2')
         true_cb_2 = [.4, .2, .4]
         true_acc_2 = np.array(
             [[.8, .7, .6],
@@ -196,7 +196,7 @@ class TestNPLM(unittest.TestCase):
         self.assertTrue(close_estimation(cb_2, true_cb_2))
 
     def test_general_accuracy_recovery_3(self):
-        print('Testing Accuracy Recovery Rate for GenLM - 3 with Abstention')
+        print('Testing Accuracy Recovery Rate for PLM - 3 with Abstention')
         true_cb_3 = [.4, .2, .4]
         true_acc_3 = np.array(
             [[.8, .7, .6],
@@ -238,7 +238,7 @@ class TestNPLM(unittest.TestCase):
         self.assertTrue(close_estimation(prp_3, abstention))
 
     def test_general_accuracy_recovery_4(self):
-        print('Testing Accuracy Recovery Rate for GenLM - 4 with Abstention')
+        print('Testing Accuracy Recovery Rate for PLM - 4 with Abstention')
         true_cb_3 = [.4, .2, .4]
         true_acc_3 = np.array(
             [[.8, .7, .6],

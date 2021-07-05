@@ -27,4 +27,4 @@ script:
   - python test/test_naive_bayes.py
   - python test/test_hmm.py
   - python test/test_linked_hmm.py
-  - python test/test_nplm.py
+  - python test/test_partial_labels.py
