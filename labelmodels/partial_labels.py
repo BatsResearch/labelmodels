@@ -22,12 +22,13 @@ class PartialLabelLearningConfig(LearningConfig):
 
 class PartialLabelModel(LabelModel):
     """A generative label model that assumes that all partial labeling functions are
-    conditionally independent given the true class label/
+    conditionally independent given the true class label. A naive Bayes distribution
+    is assumed.
     """
 
     def __init__(self, num_classes,
-                 fid2clusters,
-                 init_acc=0.7, preset_cb=None,
+                 labelpartition_cfg,
+                 init_acc=0.7, preset_classbalance=None,
                  learn_class_balance=True,
                  device='cpu'):
         """Constructor.
@@ -37,8 +38,8 @@ class PartialLabelModel(LabelModel):
 
         :param num_classes: number of target classes, i.e., binary
                             classification = 2
-        :param fid2clusters: partial labeling functions configurations
-        :param preset_cb: None if want to learn class balance. Can be preset as fixed class balance
+        :param labelpartition_cfg: partial labeling functions configurations
+        :param preset_classbalance: None if want to learn class balance. Can be preset as fixed class balance
         :param init_acc: initial estimated labeling and linking function
                          accuracy, must be a float in [0,1]
         :param device: calculation device
@@ -48,15 +49,15 @@ class PartialLabelModel(LabelModel):
         self.device = device
         if not torch.cuda.is_available():
             self.device = 'cpu'
-        self.preset_cb = preset_cb
+        self.preset_classbalance = preset_classbalance
         self.num_classes = num_classes
         self.init_acc = init_acc
-        self.fid2clusters = fid2clusters
-        self.num_df = len(fid2clusters)
+        self.labelpartition_cfg = labelpartition_cfg
+        self.num_df = len(labelpartition_cfg)
 
-        if self.preset_cb is not None:
+        if self.preset_classbalance is not None:
             self.class_balance = torch.nn.Parameter(
-                torch.log(self.preset_cb),
+                torch.log(self.preset_classbalance),
                 requires_grad=False
             )
         else:
@@ -88,12 +89,12 @@ class PartialLabelModel(LabelModel):
         def union(l1, l2):
             return list(set(l1) | set(l2))
 
-        for fid, clusters in self.fid2clusters.items():
+        for fid, clusters in self.labelpartition_cfg.items():
             crange = clusters[0]
             ccover = []
             for cluster_id, cluster in enumerate(clusters):
                 cluster.sort()
-                self.fid2clusters[fid][cluster_id] = cluster
+                self.labelpartition_cfg[fid][cluster_id] = cluster
                 crange = intercect(crange, cluster)
                 ccover = union(ccover, cluster)
             if len(crange) > 0:
@@ -101,7 +102,7 @@ class PartialLabelModel(LabelModel):
             if len(ccover) < self.num_classes:
                 raise RuntimeError('Setup Violation: Class must appear at least once! Please setup a dummy label group if necessary!')
 
-        for fid, clusters in self.fid2clusters.items():
+        for fid, clusters in self.labelpartition_cfg.items():
             for cluster_id, cluster in enumerate(clusters):
                 for class_id in cluster:
                     self.poslib[fid, class_id - 1] += 1
@@ -202,10 +203,9 @@ class PartialLabelModel(LabelModel):
         :param batches: sequence of inputs to forward(). The sequence must
                         contain tuples, even if forward() takes one
                         argument (besides self)
-        :param config: an instance of LearningConfig
+        :param config: an instance of PartialLabelLearningConfig
         """
 
-        # Sets up optimization hyperparameters
         optimizer = torch.optim.Adam(
             self.parameters(), lr=config.step_size,
             weight_decay=0)
@@ -220,7 +220,6 @@ class PartialLabelModel(LabelModel):
         else:
             scheduler = None
 
-        # Sets model to training mode
         self.train()
 
         for epoch in range(config.epochs):
@@ -252,6 +251,14 @@ class PartialLabelModel(LabelModel):
             torch.cuda.empty_cache()
 
     def _setup(self, votes, batch_size, shuffle=False):
+        ''' Setup \& precalculates/populates helper variables
+
+        :param votes: Full PLFs votes input.
+        :param batch_size: # of instances in one batch
+        :param shuffle_rows: Decides if rows of given votse need to shuffle
+
+        :return: batched votes in shape [# batch, # instance, # plfs]
+        '''
         batches = self._create_minibatches(votes, batch_size, shuffle)
         cth = self.ct.unsqueeze(0).repeat(batch_size, 1, 1)
         self.c = torch.zeros([len(batches), batch_size, self.num_df, self.num_classes])
@@ -290,6 +297,13 @@ class PartialLabelModel(LabelModel):
         return self.class_balance - torch.logsumexp(self.class_balance, dim=0)
 
     def _cll(self, votes, bid):
+        '''Calculates class conditioned likelihood for batched votes.
+
+        :param votes: current votes (batch)
+        :param bid: batch id for current votes
+
+        :return: class-conditioned likelihood for given votes and batch index.
+        '''
         num_inst = votes.shape[0]
 
         za = self.accuracy.unsqueeze(2)
@@ -312,6 +326,14 @@ class PartialLabelModel(LabelModel):
 
 
     def _create_minibatches(self, votes, batch_size, shuffle_rows=False):
+        ''' Create (shuffled) batched votes for parallelized estimation
+
+        :param votes: Full PLFs votes input.
+        :param batch_size: # of instances in one batch
+        :param shuffle_rows: Decides if rows of given votse need to shuffle
+
+        :return: batched votes in shape [# batch, # instance, # plfs]
+        '''
         if shuffle_rows:
             index = np.arange(np.shape(votes)[0])
             np.random.shuffle(index)
