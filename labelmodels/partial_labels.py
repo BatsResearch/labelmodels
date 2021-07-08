@@ -27,7 +27,7 @@ class PartialLabelModel(LabelModel):
     """
 
     def __init__(self, num_classes,
-                 labelpartition_cfg,
+                 label_partition,
                  init_acc=0.7, preset_classbalance=None,
                  learn_class_balance=True,
                  device='cpu'):
@@ -38,7 +38,9 @@ class PartialLabelModel(LabelModel):
 
         :param num_classes: number of target classes, i.e., binary
                             classification = 2
-        :param labelpartition_cfg: partial labeling functions configurations
+        :param label_partition: partial labeling functions configurations. The label_partition configures the label
+                                partitions mapping in format as
+                                {PLF's index: [partition_1, partition_2, ..., partition_{k_l}]}
         :param preset_classbalance: None if want to learn class balance. Can be preset as fixed class balance
         :param init_acc: initial estimated labeling and linking function
                          accuracy, must be a float in [0,1]
@@ -52,8 +54,8 @@ class PartialLabelModel(LabelModel):
         self.preset_classbalance = preset_classbalance
         self.num_classes = num_classes
         self.init_acc = init_acc
-        self.labelpartition_cfg = labelpartition_cfg
-        self.num_df = len(labelpartition_cfg)
+        self.label_partition = label_partition
+        self.num_df = len(label_partition)
 
         if self.preset_classbalance is not None:
             self.class_balance = torch.nn.Parameter(
@@ -89,12 +91,12 @@ class PartialLabelModel(LabelModel):
         def union(l1, l2):
             return list(set(l1) | set(l2))
 
-        for fid, clusters in self.labelpartition_cfg.items():
+        for fid, clusters in self.label_partition.items():
             crange = clusters[0]
             ccover = []
             for cluster_id, cluster in enumerate(clusters):
                 cluster.sort()
-                self.labelpartition_cfg[fid][cluster_id] = cluster
+                self.label_partition[fid][cluster_id] = cluster
                 crange = intercect(crange, cluster)
                 ccover = union(ccover, cluster)
             if len(crange) > 0:
@@ -102,7 +104,7 @@ class PartialLabelModel(LabelModel):
             if len(ccover) < self.num_classes:
                 raise RuntimeError('Setup Violation: Class must appear at least once! Please setup a dummy label group if necessary!')
 
-        for fid, clusters in self.labelpartition_cfg.items():
+        for fid, clusters in self.label_partition.items():
             for cluster_id, cluster in enumerate(clusters):
                 for class_id in cluster:
                     self.poslib[fid, class_id - 1] += 1
@@ -137,9 +139,8 @@ class PartialLabelModel(LabelModel):
         """Returns the posterior distribution over true labels given labeling
         function outputs according to the model
 
-        :param votes: m x n matrix in {0, ..., k}, where m is the batch size,
-                      n is the number of labeling functions and k is the number
-                      of classes
+        :param votes: m x n matrix where each element is in the set {0, 0, 1, ..., k_l}, where
+                      k_l is the number of label partitions for partial labeling functions PLF_{l}.
         :return: m x k matrix, where each row is the posterior distribution over
                  the true class label for the corresponding example
         """
@@ -161,9 +162,8 @@ class PartialLabelModel(LabelModel):
     def get_most_probable_labels(self, votes):
         """Returns the most probable true labels given observed function outputs.
 
-        :param votes: m x n matrix in {0, ..., k}, where m is the batch size,
-                      n is the number of labeling functions and k is the number
-                      of classes
+        :param votes: m x n matrix where each element is in the set {0, 0, 1, ..., k_l}, where
+                      k_l is the number of label partitions for partial labeling functions PLF_{l}.
         :return: 1-d Numpy array of most probable labels
         """
         return np.argmax(self.get_label_distribution(votes), axis=1) + 1
@@ -257,9 +257,10 @@ class PartialLabelModel(LabelModel):
         :param batch_size: # of instances in one batch
         :param shuffle_rows: Decides if rows of given votse need to shuffle
 
-        :return: batched votes in shape [# batch, # instance, # plfs]
+        :return: 3-d Numpy array for batched votes in shape [# batch, # instance, # plfs]
         '''
-        batches = self._create_minibatches(votes, batch_size, shuffle)
+        # Normalizing to 0-indexed LPs.
+        batches = self._create_minibatches(votes-1, batch_size, shuffle)
         cth = self.ct.unsqueeze(0).repeat(batch_size, 1, 1)
         self.c = torch.zeros([len(batches), batch_size, self.num_df, self.num_classes])
         self.n = torch.zeros([len(batches), batch_size, self.num_df, self.num_classes])
@@ -302,7 +303,7 @@ class PartialLabelModel(LabelModel):
         :param votes: current votes (batch)
         :param bid: batch id for current votes
 
-        :return: class-conditioned likelihood for given votes and batch index.
+        :return: 2-d torch tensor for class-conditioned likelihood for given votes and batch index.
         '''
         num_inst = votes.shape[0]
 
@@ -332,7 +333,7 @@ class PartialLabelModel(LabelModel):
         :param batch_size: # of instances in one batch
         :param shuffle_rows: Decides if rows of given votse need to shuffle
 
-        :return: batched votes in shape [# batch, # instance, # plfs]
+        :return:  3-d Numpy array for batched votes in shape [# batch, # instance, # plfs]
         '''
         if shuffle_rows:
             index = np.arange(np.shape(votes)[0])

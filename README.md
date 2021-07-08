@@ -37,20 +37,25 @@ labels = model.get_label_distribution(votes)
 # Example Usage - Partial Label Model
 ```python
 # Let votes be an m x n matrix where m is the number of data examples, n is the
-# number of label sources, and each element is in the set {-1, 0, 1, ..., k_l-1}, where
-# k_l-1 is the number of label partitions for partial labeling functions PLF_{l}. If votes_{ij} is -1, it means that partial label source j
-# abstains from voting on example i.
+# number of label sources, and each element is in the set {0, 1, ..., k_l}, where
+# k_l is the number of label partitions for partial labeling functions PLF_{l}. If votes_{ij} is 0, 
+# it means that partial label source j abstains from voting on example i.
 
 # As an example, we create a random votes matrix for classification with
 # 1000 examples and 3 label sources
 import numpy as np
 import torch
-simple_labelpartition_cfg = {
+
+# label_partition is a table that specifies 0-indexed PLF's label partition configurations, for this brief example,
+# we have 3 PLFs each separating the 3-class label space into two partitions. For 0-th PLF, it partitions the label space
+# into \{1\} and \{2,3\}. Notice the class label is 1-indexed.
+# The label_partition configures the label partitions mapping in format as {PLF's index: [partition_1, partition_2, ..., partition_{k_l}]}
+simple_label_partition = {
         0: [[1], [2, 3]],
         1: [[2], [1, 3]],
         2: [[3], [1, 2]]
 }
-num_sources = len(simple_labelpartition_cfg)
+num_sources = len(simple_label_partition)
 num_classes = 3
 votes = np.random.randint(0, 1, size=(1000, 3))
 
@@ -62,7 +67,7 @@ from labelmodels import PartialLabelModel
 # We initialize the model by specifying that there are 2 classes (binary
 # classification) and 5 label sources
 model = PartialLabelModel(num_classes=num_classes,
-                           labelpartition_cfg=simple_labelpartition_cfg,
+                           label_partition=simple_label_partition,
                            preset_classbalance=None,
                            device=device)
 # Next, we estimate the model's parameters

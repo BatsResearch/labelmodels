@@ -9,25 +9,25 @@ from copy import deepcopy as dc
 
 
 class Experiment:
-    def __init__(self, name, num_classes, labelpartition_cfg, lm_annot_votes, lm_train_votes, lm_annot_labels=None):
+    def __init__(self, name, num_classes, label_partition, lm_annot_votes, lm_train_votes, lm_annot_labels=None):
         self.name = name
-        self.labelpartition_cfg = labelpartition_cfg
+        self.label_partition = label_partition
         self.lm_annot_votes = lm_annot_votes
         self.lm_train_votes = lm_train_votes
         self.lm_annot_labels = lm_annot_labels
         self.num_classes = num_classes
-        self.num_df = len(labelpartition_cfg)
+        self.num_df = len(label_partition)
 
     def set_soft_labels(self, soft_labels):
         pass
 
 
 class LMTask:
-    def __init__(self, name, num_classes, labelpartition_cfg, preset_classbalance=None, device='cuda:0'):
+    def __init__(self, name, num_classes, label_partition, preset_classbalance=None, device='cuda:0'):
         self.name = name
 
         self.labelmodel = PartialLabelModel(num_classes=num_classes,
-                               labelpartition_cfg=labelpartition_cfg,
+                               label_partition=label_partition,
                                preset_classbalance=preset_classbalance,
                                device=device)
 
@@ -48,8 +48,8 @@ class LMTask:
 
 def Workflow(experimental_data):
     lm_task = LMTask('test', num_classes=experimental_data.num_classes,
-                     labelpartition_cfg=experimental_data.labelpartition_cfg,
-                     device='cpu')
+                     label_partition=experimental_data.label_partition,
+                     device='cuda:0')
 
     lm_annot_soft_labels = lm_task.annotate(lm_annot_votes=experimental_data.lm_annot_votes,
                                             lm_train_votes=experimental_data.lm_train_votes)
@@ -61,12 +61,12 @@ def Workflow(experimental_data):
 
 
 def setup():
-    simple_labelpartition_cfg = {
+    simple_label_partition = {
         0: [[1], [2, 3]],
         1: [[2], [1, 3]],
         2: [[3], [1, 2]]
     }
-    num_sources = len(simple_labelpartition_cfg)
+    num_sources = len(simple_label_partition)
     num_classes = 4
     num_annot_inst = 4096 * 16
 
@@ -75,7 +75,7 @@ def setup():
     labelmodel_annotation_labels = np.random.randint(num_classes, size=(num_annot_inst, 1)) + 1
     test_data = Experiment('simple-tests',
                            num_classes=num_classes,
-                           labelpartition_cfg=simple_labelpartition_cfg,
+                           label_partition=simple_label_partition,
                            lm_annot_votes=labelmodel_annotation_votes,
                            lm_train_votes=labelmodel_training_votes,
                            lm_annot_labels=labelmodel_annotation_labels)
@@ -83,8 +83,8 @@ def setup():
     return test_data
 
 
-def setup_test(labelpartition_cfg, accuracies, class_balance, m=4096*8, abstention=None):
-    votes, gold = _generate_data(m, labelpartition_cfg, accuracies, class_balance, abstention=abstention)
+def setup_test(label_partition, accuracies, class_balance, m=4096*8, abstention=None):
+    votes, gold = _generate_data(m, label_partition, accuracies, class_balance, abstention=abstention)
 
     return votes, gold
 
@@ -112,17 +112,17 @@ class TestPartialLabelModel(unittest.TestCase):
              [.5, .7, .65],
              [.8, .8, .75],
              [.9, .7, .8]])
-        labelpartition_cfg = {
+        label_partition = {
             0: [[1], [2, 3]],
             1: [[1], [2, 3]],
             2: [[1, 2], [3]],
             3: [[1, 2], [3]],
             4: [[1, 3], [2]]
         }
-        votes, gold = setup_test(labelpartition_cfg, true_acc_0, true_cb_0)
+        votes, gold = setup_test(label_partition, true_acc_0, true_cb_0)
         test_data_0 = Experiment('acc-tests-0',
                                  num_classes=3,
-                                 labelpartition_cfg=labelpartition_cfg,
+                                 label_partition=label_partition,
                                  lm_annot_votes=votes,
                                  lm_train_votes=votes,
                                  lm_annot_labels=gold)
@@ -142,17 +142,17 @@ class TestPartialLabelModel(unittest.TestCase):
              [.5, .9, .6],
              [.8, .7, .6],
              [.9, .7, .6]])
-        labelpartition_cfg = {
+        label_partition = {
             0: [[1], [2], [3]],
             1: [[1], [2, 3]],
             2: [[1, 2], [3]],
             3: [[1], [2], [3]],
             4: [[1], [2], [3]]
         }
-        votes, gold = setup_test(labelpartition_cfg, true_acc_1, true_cb_1)
+        votes, gold = setup_test(label_partition, true_acc_1, true_cb_1)
         test_data_1 = Experiment('acc-tests-1',
                                  num_classes=3,
-                                 labelpartition_cfg=labelpartition_cfg,
+                                 label_partition=label_partition,
                                  lm_annot_votes=votes,
                                  lm_train_votes=votes,
                                  lm_annot_labels=gold)
@@ -172,7 +172,7 @@ class TestPartialLabelModel(unittest.TestCase):
              [.8, .6, .7],
              [.9, .7, .6],
              [.8, .5, .6]])
-        labelpartition_cfg = {
+        label_partition = {
             0: [[1], [2], [3]],
             1: [[2], [1, 3]],
             2: [[1, 2], [3]],
@@ -180,11 +180,11 @@ class TestPartialLabelModel(unittest.TestCase):
             4: [[1], [2], [3]],
             5: [[3, 2], [1]]
         }
-        votes, gold = setup_test(labelpartition_cfg, true_acc_2, true_cb_2)
+        votes, gold = setup_test(label_partition, true_acc_2, true_cb_2)
 
         test_data_2 = Experiment('acc-tests-2',
                                  num_classes=3,
-                                 labelpartition_cfg=labelpartition_cfg,
+                                 label_partition=label_partition,
                                  lm_annot_votes=votes,
                                  lm_train_votes=votes,
                                  lm_annot_labels=gold)
@@ -205,7 +205,7 @@ class TestPartialLabelModel(unittest.TestCase):
              [.8, .6, .7],
              [.9, .8, .6],
              [.8, .5, .8]])
-        labelpartition_cfg = {
+        label_partition = {
             0: [[1], [2], [3]],
             1: [[2], [1, 3]],
             2: [[1, 2], [3]],
@@ -215,7 +215,7 @@ class TestPartialLabelModel(unittest.TestCase):
         }
 
         abstention = [0.8, 0.9, 0.8, 0.7, 0.8, 0.9]
-        votes, gold = setup_test(labelpartition_cfg, true_acc_3, true_cb_3,
+        votes, gold = setup_test(label_partition, true_acc_3, true_cb_3,
                                  abstention=abstention)
 
         tv = dc(votes)
@@ -227,7 +227,7 @@ class TestPartialLabelModel(unittest.TestCase):
 
         test_data_3 = Experiment('acc-tests-2',
                                  num_classes=3,
-                                 labelpartition_cfg=labelpartition_cfg,
+                                 label_partition=label_partition,
                                  lm_annot_votes=votes,
                                  lm_train_votes=votes,
                                  lm_annot_labels=gold)
@@ -247,7 +247,7 @@ class TestPartialLabelModel(unittest.TestCase):
              [.8, .6, .7],
              [.9, .8, .6],
              [.8, .5, .8]])
-        labelpartition_cfg = {
+        label_partition = {
             0: [[1], [2], [3]],
             1: [[2], [1, 3]],
             2: [[1, 2], [3]],
@@ -257,7 +257,7 @@ class TestPartialLabelModel(unittest.TestCase):
         }
 
         abstention = [0.8, 0.9, 0.8, 0.7, 0.8, 0.9]
-        votes, gold = setup_test(labelpartition_cfg, true_acc_3, true_cb_3,
+        votes, gold = setup_test(label_partition, true_acc_3, true_cb_3,
                                  abstention=abstention)
 
         tv = dc(votes)
@@ -269,7 +269,7 @@ class TestPartialLabelModel(unittest.TestCase):
 
         test_data_3 = Experiment('acc-tests-4',
                                  num_classes=3,
-                                 labelpartition_cfg=labelpartition_cfg,
+                                 label_partition=label_partition,
                                  lm_annot_votes=votes,
                                  lm_train_votes=votes,
                                  lm_annot_labels=gold)
@@ -279,19 +279,19 @@ class TestPartialLabelModel(unittest.TestCase):
         self.assertTrue(close_estimation(prp_3, abstention))
 
 
-def _generate_data(m, labelpartition_cfg, accuracies, class_balance, abstention=None):
+def _generate_data(m, label_partition, accuracies, class_balance, abstention=None):
     """
     Generate synthetic data
 
     :param m: number of examples
     :param n: number of sources
-    :param labelpartition_cfg: feature id clustering
+    :param label_partition: feature id clustering
     :param accuracies: n x k matrix of accuracies, where k is number of classes
     :param class_balance: k-dim vector representing prior over classes
     :param abstention: n-dim vector representing prob of not abstention
     :return: m x n matrix of features, m-dim vector of gold class labels
     """
-    n = len(labelpartition_cfg)
+    n = len(label_partition)
     gold = np.zeros((m,), dtype=np.int16)
     votes = np.zeros((m, n), dtype=np.int16)
 
@@ -302,11 +302,11 @@ def _generate_data(m, labelpartition_cfg, accuracies, class_balance, abstention=
             # Collects correct and incorrect clusters
             correct = []
             incorrect = []
-            for cid, cluster in enumerate(labelpartition_cfg[j]):
+            for cid, cluster in enumerate(label_partition[j]):
                 if k + 1 in cluster:
-                    correct.append(cid)
+                    correct.append(cid+1)
                 else:
-                    incorrect.append(cid)
+                    incorrect.append(cid+1)
             if np.random.random() < accuracies[j, k]:
                 votes[i, j] = np.random.choice(correct)
             else:
@@ -314,7 +314,7 @@ def _generate_data(m, labelpartition_cfg, accuracies, class_balance, abstention=
 
     if abstention is not None:
         for idx, prob in enumerate(abstention):
-            votes[np.array(sample(range(m), int((1 - prob) * m))), idx] = -1
+            votes[np.array(sample(range(m), int((1 - prob) * m))), idx] = 0
 
     return votes, gold
 
