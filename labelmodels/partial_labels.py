@@ -149,7 +149,7 @@ class PartialLabelModel(LabelModel):
 
         labels = np.ndarray((votes.shape[0], self.num_classes))
         for batch_id, batch_votes in enumerate(batches):
-            class_balance = self._norm_class_balance()
+            class_balance = self._get_norm_class_balance()
             lf_likelihood = self._cll(batch_votes, batch_id)
             jll = class_balance + lf_likelihood
             P = torch.exp(jll - torch.max(jll, dim=1)[0].unsqueeze(1).repeat(1, self.num_classes))
