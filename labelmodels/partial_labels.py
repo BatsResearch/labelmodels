@@ -53,7 +53,7 @@ class PartialLabelModel(LabelModel):
             self.device = 'cpu'
         self.preset_classbalance = preset_classbalance
         self.num_classes = num_classes
-        self.init_acc = init_acc
+        self.init_acc = -1 * np.log(1.0 / init_acc - 1) / 2
         self.label_partition = label_partition
         self.num_df = len(label_partition)
 
