@@ -53,7 +53,7 @@ class PartialLabelModel(LabelModel):
             self.device = 'cpu'
         self.preset_classbalance = preset_classbalance
         self.num_classes = num_classes
-        self.init_acc = init_acc
+        self.init_acc = -1 * np.log(1.0 / init_acc - 1) / 2
         self.label_partition = label_partition
         self.num_df = len(label_partition)
 
@@ -175,7 +175,7 @@ class PartialLabelModel(LabelModel):
                  representing the estimated prior probability that an example
                  has that label
         """
-        return np.exp(self._get_norm_class_balance().detach().numpy())
+        return np.exp(self._get_norm_class_balance().detach().cpu().numpy())
 
     def get_accuracies(self):
         """Returns the model's estimated labeling function accuracies
@@ -184,7 +184,7 @@ class PartialLabelModel(LabelModel):
                  the corresponding labeling function correctly outputs
                  the true class label, given that it does not abstain
         """
-        acc = self.accuracy.detach().numpy()
+        acc = self.accuracy.detach().cpu().numpy()
         return np.exp(acc) / (np.exp(acc) + np.exp(-1 * acc))
 
     def get_propensities(self):
@@ -194,7 +194,7 @@ class PartialLabelModel(LabelModel):
                  function, representing the estimated probability that
                  the corresponding labeling function does not abstain
         """
-        prop = self.propensity.detach().numpy()
+        prop = self.propensity.detach().cpu().numpy()
         return np.exp(prop) / (np.exp(prop) + 1)
 
     def _do_estimate_label_model(self, batches, config):
