@@ -219,10 +219,6 @@ class LinkedHMM(ClassConditionalLabelModel):
                     p += link_cll[i]
                     jll[i] += torch.max(p, dim=0)[0]
                     bt[i, :] = torch.argmax(p, dim=0)
-            
-            print("🔥======")
-            print(bt)
-            print("🔥======")
 
             seq_ends = [x - 1 for x in seq_starts] + [label_votes.shape[0] - 1]
             res = []
@@ -304,7 +300,6 @@ class LinkedHMM(ClassConditionalLabelModel):
                     p = path_scores[i-1].clone().unsqueeze(2) + norm_transitions
                     p += link_cll[i]
                     p = p.view(-1, self.num_classes)
-
                     scores, paths = torch.topk(p, k=topk, dim=0)  # paths would use (num_tags * n_permutations) nodes
                     assert scores.shape == (topk, self.num_classes)
                     assert paths.shape == (topk, self.num_classes)
@@ -327,13 +322,14 @@ class LinkedHMM(ClassConditionalLabelModel):
                         continue
                     viterbi_path.append(int(bt[j].view(-1)[viterbi_path[-1]]))
                     j -= 1
-                viterbi_path = [int(j % self.num_classes) + 1 for j in viterbi_path]
+                viterbi_path = [int(path % self.num_classes) + 1 for path in viterbi_path]
                 viterbi_path.reverse()
                 res.append(viterbi_path)
             
             for k in range(topk):
                 for i in range(len(res[k])):
                     out[k][offset + i] = res[k][i]
+            offset += len(res[0])
         return out
 
     def get_label_distribution(self, label_votes, link_votes, seq_starts):
