@@ -219,6 +219,10 @@ class LinkedHMM(ClassConditionalLabelModel):
                     p += link_cll[i]
                     jll[i] += torch.max(p, dim=0)[0]
                     bt[i, :] = torch.argmax(p, dim=0)
+            
+            print("🔥======")
+            print(bt)
+            print("🔥======")
 
             seq_ends = [x - 1 for x in seq_starts] + [label_votes.shape[0] - 1]
             res = []
@@ -237,6 +241,99 @@ class LinkedHMM(ClassConditionalLabelModel):
             for i in range(len(res)):
                 out[offset + i] = res[i]
             offset += len(res)
+        return out
+
+    def get_link_propensities(self):
+        """Returns the model's estimated linking function propensities, i.e.,
+        the probability that a linking function does not abstain
+        :return: a NumPy array with one element in [0,1] for each linking
+                 function, representing the estimated probability that
+                 the corresponding linking function does not abstain
+        """
+        prop = self.link_propensity.detach().numpy()
+        return np.exp(prop) / (np.exp(prop) + 1)
+
+    def get_k_most_probable_labels(self, label_votes, link_votes, seq_starts, topk):
+        """
+        Computes the most probable underlying sequence nodes given function
+        outputs
+
+        :param label_votes: m x n matrix in {0, ..., k}, where m is the sum of
+                            the lengths of the sequences in the batch, n is the
+                            number of labeling functions and k is the number of
+                            classes
+        :param link_votes: m x n matrix in {-1, 0, 1}, where m is the sum of
+                           the lengths of the sequences in the batch and n is the
+                           number of linking functions
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, label_votes[seq_starts[i]]
+                           is the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :return: vector of length m, where element is the most likely predicted labels
+        """
+        # Converts to CSR and integers to standardize input
+        label_votes = sparse.csr_matrix(label_votes, dtype=np.int)
+        link_votes = sparse.csr_matrix(link_votes, dtype=np.int)
+        seq_starts = np.array(seq_starts, dtype=np.int)
+
+        out = np.ndarray((topk, label_votes.shape[0],), dtype=np.int)
+
+        offset = 0
+        for label_votes, link_votes, seq_starts in self._create_minibatches(
+                label_votes, link_votes, seq_starts, 32):
+            # Initializes joint log likelihood with labeling function likelihood
+            jll = self._get_labeling_function_likelihoods(label_votes)
+            link_cll = self._get_linking_function_likelihoods(link_votes)
+            norm_start_balance = self._get_norm_start_balance()
+            norm_transitions = self._get_norm_transitions()
+
+            path_scores = []
+            T = label_votes.shape[0]
+            bt = torch.zeros([T, topk, self.num_classes])
+            for i in range(0, T):
+                if i in seq_starts:
+                    path_scores.append((jll[i] + norm_start_balance).unsqueeze(0))
+                else:
+                    # print(jll[i-1].clone().unsqueeze(1).repeat(1, self.num_classes)) # same shape as norm_transitions
+                    # jll corresponds to tag_sequence in AllenNLP's viterbi_decode
+                    # p corresponds to summed_potentials
+                    # torch.max(p, dim=0)[0] corresponds to scores
+                    # torch.argmax(p, dim=0) corresponds to path_indices
+                    
+                    p = path_scores[i-1].clone().unsqueeze(2) + norm_transitions
+                    p += link_cll[i]
+                    p = p.view(-1, self.num_classes)
+
+                    scores, paths = torch.topk(p, k=topk, dim=0)  # paths would use (num_tags * n_permutations) nodes
+                    assert scores.shape == (topk, self.num_classes)
+                    assert paths.shape == (topk, self.num_classes)
+                    scores = jll[i] + scores
+                    path_scores.append(scores)
+                    bt[i] = paths
+
+            res = []
+            seq_ends = [x - 1 for x in seq_starts] + [label_votes.shape[0] - 1]
+            for k in range(topk):
+                j = T-1
+                viterbi_path = []
+                while j >= 0:
+                    if j in seq_ends:
+                        seq_path_scores = path_scores[j].view(-1)
+                        viterbi_scores, best_paths = torch.topk(seq_path_scores, k=topk, dim=0)
+                        viterbi_path.append(best_paths[k])
+                    if j in seq_starts:
+                        j -= 1
+                        continue
+                    viterbi_path.append(int(bt[j].view(-1)[viterbi_path[-1]]))
+                    j -= 1
+                viterbi_path = [int(j % self.num_classes) + 1 for j in viterbi_path]
+                viterbi_path.reverse()
+                res.append(viterbi_path)
+            
+            for k in range(topk):
+                for i in range(len(res[k])):
+                    out[k][offset + i] = res[k][i]
         return out
 
     def get_label_distribution(self, label_votes, link_votes, seq_starts):
