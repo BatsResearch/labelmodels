@@ -223,10 +223,10 @@ class TestLinkedHMM(unittest.TestCase):
 #             self.assertGreaterEqual(accuracy, .95)
 
     def test_get_k_most_probable_labels(self):
-            m = 33 # num_seqs
+            m = 100 # num_seqs
             n1 = 4 # num_labeling_funcs
             n2 = 5 # num_linking_funcs
-            k = 3 # num_classes
+            k = 5 # num_classes
 
             model = LinkedHMM(k, n1, n2)
             with torch.no_grad():
@@ -259,7 +259,7 @@ class TestLinkedHMM(unittest.TestCase):
 
             
             # predictions = model.get_most_probable_labels(labels, links, seq_starts)
-            # print(predictions)
+            # print("prediction:\n", predictions)
             # k_predictions = model.get_k_most_probable_labels(labels, links, seq_starts, topk=2)
             # print(k_predictions)
             # print(k_predictions[0])
