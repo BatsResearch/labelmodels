@@ -173,7 +173,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         prop = self.link_propensity.detach().numpy()
         return np.exp(prop) / (np.exp(prop) + 1)
 
-    def get_most_probable_labels(self, label_votes, link_votes, seq_starts):
+    def get_most_probable_labels(self, label_votes, link_votes, seq_starts, return_viterbi_scores=False):
         """
         Computes the most probable underlying sequence nodes given function
         outputs
@@ -198,6 +198,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         seq_starts = np.array(seq_starts, dtype=np.int)
 
         out = np.ndarray((label_votes.shape[0],), dtype=np.int)
+        final_scores = []
 
         offset = 0
         for label_votes, link_votes, seq_starts in self._create_minibatches(
@@ -226,6 +227,7 @@ class LinkedHMM(ClassConditionalLabelModel):
             while j >= 0:
                 if j in seq_ends:
                     res.append(torch.argmax(jll[j, :]).item())
+                    final_scores.append(torch.max(jll[j, :]).item())
                 if j in seq_starts:
                     j -= 1
                     continue
@@ -237,6 +239,8 @@ class LinkedHMM(ClassConditionalLabelModel):
             for i in range(len(res)):
                 out[offset + i] = res[i]
             offset += len(res)
+        if return_viterbi_scores:
+            return np.array(final_scores)
         return out
 
     def get_link_propensities(self):
@@ -249,7 +253,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         prop = self.link_propensity.detach().numpy()
         return np.exp(prop) / (np.exp(prop) + 1)
 
-    def get_k_most_probable_labels(self, label_votes, link_votes, seq_starts, topk):
+    def get_k_most_probable_labels(self, label_votes, link_votes, seq_starts, topk, return_viterbi_scores=False):
         """
         Computes the most probable underlying sequence nodes given function
         outputs
@@ -274,6 +278,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         seq_starts = np.array(seq_starts, dtype=np.int)
 
         out = np.ndarray((topk, label_votes.shape[0],), dtype=np.int)
+        final_scores = []
 
         offset = 0
         for label_votes, link_votes, seq_starts in self._create_minibatches(
@@ -317,6 +322,10 @@ class LinkedHMM(ClassConditionalLabelModel):
                         seq_path_scores = path_scores[j].view(-1)
                         viterbi_scores, best_paths = torch.topk(seq_path_scores, k=topk, dim=0)
                         viterbi_path.append(best_paths[k])
+                        if k == 0:
+                            # because viterbi_scores include scores for other k, 
+                            # this if-condition ensures that we don't duplicate our result
+                            final_scores.append(viterbi_scores.tolist())
                     if j in seq_starts:
                         j -= 1
                         continue
@@ -330,6 +339,8 @@ class LinkedHMM(ClassConditionalLabelModel):
                 for i in range(len(res[k])):
                     out[k][offset + i] = res[k][i]
             offset += len(res[0])
+        if return_viterbi_scores:
+            return np.array(final_scores)
         return out
 
     def get_label_distribution(self, label_votes, link_votes, seq_starts):
