@@ -4,6 +4,11 @@
 
 Lightweight implementations of generative label models for weakly supervised machine learning
 
+### Installation
+```
+pip3 install git+https://github.com/yongzx/labelmodels.git@top-k-probable
+```
+
 # Example Usage - Naive Bayes Model
 ```python
 # Let votes be an m x n matrix where m is the number of data examples, n is the
