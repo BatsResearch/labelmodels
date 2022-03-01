@@ -1,3 +1,5 @@
+from contextlib import AsyncExitStack
+from os import link
 from .label_model import ClassConditionalLabelModel, LearningConfig, init_random
 import numpy as np
 from scipy import sparse
@@ -173,7 +175,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         prop = self.link_propensity.detach().numpy()
         return np.exp(prop) / (np.exp(prop) + 1)
 
-    def get_most_probable_labels(self, label_votes, link_votes, seq_starts):
+    def get_most_probable_labels(self, label_votes, link_votes, seq_starts, return_viterbi_scores=False):
         """
         Computes the most probable underlying sequence nodes given function
         outputs
@@ -198,6 +200,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         seq_starts = np.array(seq_starts, dtype=np.int)
 
         out = np.ndarray((label_votes.shape[0],), dtype=np.int)
+        final_scores = []
 
         offset = 0
         for label_votes, link_votes, seq_starts in self._create_minibatches(
@@ -223,9 +226,11 @@ class LinkedHMM(ClassConditionalLabelModel):
             seq_ends = [x - 1 for x in seq_starts] + [label_votes.shape[0] - 1]
             res = []
             j = T-1
+            _scores = list()
             while j >= 0:
                 if j in seq_ends:
                     res.append(torch.argmax(jll[j, :]).item())
+                    _scores.append(torch.max(jll[j, :]).item())
                 if j in seq_starts:
                     j -= 1
                     continue
@@ -233,10 +238,209 @@ class LinkedHMM(ClassConditionalLabelModel):
                 j -= 1
             res = [x + 1 for x in res]
             res.reverse()
+            _scores.reverse()
+            final_scores += _scores
 
             for i in range(len(res)):
                 out[offset + i] = res[i]
             offset += len(res)
+        if return_viterbi_scores:
+            return out, np.array(final_scores)
+        return out
+
+    def compute_viterbi(self, label_votes, link_votes, seq_starts, return_viterbi_scores=False):
+        """
+        Computes the most probable underlying sequence nodes given function
+        outputs
+
+        :param label_votes: m x n matrix in {0, ..., k}, where m is the sum of
+                            the lengths of the sequences in the batch, n is the
+                            number of labeling functions and k is the number of
+                            classes
+        :param link_votes: m x n matrix in {-1, 0, 1}, where m is the sum of
+                           the lengths of the sequences in the batch and n is the
+                           number of linking functions
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, label_votes[seq_starts[i]]
+                           is the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :return: vector of length m, where element is the most likely predicted labels
+        """
+        # Converts to CSR and integers to standardize input
+        label_votes = sparse.csr_matrix(label_votes, dtype=np.int)
+        link_votes = sparse.csr_matrix(link_votes, dtype=np.int)
+        seq_starts = np.array(seq_starts, dtype=np.int)
+
+        out = np.ndarray((label_votes.shape[0],), dtype=np.int)
+        final = []
+
+        offset = 0
+        for label_votes, link_votes, seq_starts in self._create_minibatches(
+                label_votes, link_votes, seq_starts, 32):
+            # Initializes joint log likelihood with labeling function likelihood
+            jll = self._get_labeling_function_likelihoods(label_votes) # (#tokens, #classes)
+            link_cll = self._get_linking_function_likelihoods(link_votes) # (#tokens, #classes, #classes)
+            norm_start_balance = self._get_norm_start_balance() # (#classes)
+            norm_transitions = self._get_norm_transitions() # (#classes, #classes)
+            
+            D = {}
+            
+            T = label_votes.shape[0]
+            # bt = torch.zeros([T, self.num_classes])
+            for i in range(0, T):
+                new_D = dict()
+                if i in seq_starts:
+                    # unary + start balance
+                    for label in range(jll.shape[1]):
+                        new_D[str(label)] = jll[i][label].item() + norm_start_balance[label].item()
+                    if D:
+                        final.append(D)
+                        D = {}
+                else:
+                    # previous score + transition + linking + unary
+                    for prev_seq, score in D.items():
+                        prev_label = int(prev_seq[-1])
+                        for label in range(jll.shape[1]):
+                            new_score = score + norm_transitions[prev_label][label] + link_cll[i][prev_label][label] + jll[i][label]
+                            new_D[f"{prev_seq}{label}"] = new_score.item()
+                D = new_D
+            if D:
+                final.append(D)
+            return final
+
+
+    def get_link_propensities(self):
+        """Returns the model's estimated linking function propensities, i.e.,
+        the probability that a linking function does not abstain
+        :return: a NumPy array with one element in [0,1] for each linking
+                 function, representing the estimated probability that
+                 the corresponding linking function does not abstain
+        """
+        prop = self.link_propensity.detach().numpy()
+        return np.exp(prop) / (np.exp(prop) + 1)
+
+    def get_k_most_probable_labels(self, label_votes, link_votes, seq_starts, topk, return_viterbi_scores=False):
+        """
+        Computes the topk most probable underlying sequence nodes given function
+        outputs.
+
+        Based on https://github.com/allenai/allennlp/blob/master/allennlp/nn/util.py
+
+        :param label_votes: m x n matrix in {0, ..., k}, where m is the sum of
+                            the lengths of the sequences in the batch, n is the
+                            number of labeling functions and k is the number of
+                            classes
+        :param link_votes: m x n matrix in {-1, 0, 1}, where m is the sum of
+                           the lengths of the sequences in the batch and n is the
+                           number of linking functions
+        :param seq_starts: vector of length l of row indices in votes indicating
+                           the start of each sequence, where l is the number of
+                           sequences in the batch. So, label_votes[seq_starts[i]]
+                           is the row vector of labeling function outputs for the
+                           first element in the ith sequence
+        :return: matrix of shape (topk, m), where element is the most likely predicted labels
+        """
+        # Converts to CSR and integers to standardize input
+        label_votes = sparse.csr_matrix(label_votes, dtype=np.int32)
+        link_votes = sparse.csr_matrix(link_votes, dtype=np.int)
+        seq_starts = np.array(seq_starts, dtype=np.int)
+
+        out = np.ndarray((topk, label_votes.shape[0],), dtype=np.int32)
+        out_scores = np.ndarray((topk, seq_starts.shape[0],), dtype=np.float64)
+        final_scores = []
+
+        offset = 0
+        offset_scores = 0
+        for label_votes, link_votes, seq_starts in self._create_minibatches(
+                label_votes, link_votes, seq_starts, 32):
+            # Initializes joint log likelihood with labeling function likelihood
+            jll = self._get_labeling_function_likelihoods(label_votes)
+            link_cll = self._get_linking_function_likelihoods(link_votes)
+            norm_start_balance = self._get_norm_start_balance()
+            norm_transitions = self._get_norm_transitions()
+
+            path_scores = []
+            path_indices = []
+            T = label_votes.shape[0]
+
+            for i in range(0, T):
+                if i in seq_starts:
+                    path_scores.append((jll[i] + norm_start_balance).unsqueeze(0))
+                    path_indices.append(torch.zeros([self.num_classes, self.num_classes]))
+                else:                  
+                    p = path_scores[i-1].clone().unsqueeze(2) + norm_transitions
+                    p += link_cll[i]
+                    p = p.view(-1, self.num_classes)  # shape: (self.num_classes, self.num_classes)
+                    
+                    maxk = min(p.size()[0], topk)
+                    scores, paths = torch.topk(p, k=maxk, dim=0)  # paths would use (num_tags * n_permutations) nodes
+
+                    assert scores.shape == (maxk, self.num_classes)
+                    assert paths.shape == (maxk, self.num_classes)
+                    scores = jll[i] + scores
+
+                    path_scores.append(scores)
+                    path_indices.append(paths)
+
+            res = []
+            res_scores = []
+            seq_ends = [x - 1 for x in seq_starts] + [label_votes.shape[0] - 1]
+            for k in range(topk):
+                j = T-1
+                viterbi_path = []
+                viterbi_score = []
+                while j >= 0:
+                    if j in seq_ends:
+                        seq_path_scores = path_scores[j].view(-1)
+                        skip_rest = False
+                        if seq_path_scores.shape[0] <= k:
+                            # print("seq_end:", j)
+                            skip_rest = True
+
+                        viterbi_scores, best_paths = torch.topk(seq_path_scores, k=min(topk, seq_path_scores.shape[0]), dim=0)  # capped at 256 because some instances are 4-token long
+                        if skip_rest:
+                            viterbi_path.append(-1)
+                            viterbi_score.append(-1)
+                        else:
+                            viterbi_path.append(best_paths[k])
+                            viterbi_score.append(viterbi_scores[k])
+                        # if k == 0:
+                        #     # because viterbi_scores include scores for other k, 
+                        #     # this if-condition ensures that we only need to store the viterbi_scores for 
+                        #     final_scores.append(viterbi_scores.tolist() + [-1] * (topk - seq_path_scores.shape[0]))  # 
+                    if j in seq_starts:
+                        j -= 1
+                        continue
+                    if skip_rest:
+                        viterbi_path.append(-1)
+                    else:
+                        viterbi_path.append(int(path_indices[j].view(-1)[viterbi_path[-1]]))
+                    j -= 1
+                # # if path == -1, it means that at this k, there's no viterbi path. E.g., k = 257 and we are working with 4-token sentence
+                # # assert False 
+                # if -1 in viterbi_path:
+                #     assert False
+                viterbi_path = [(int(path % self.num_classes) + 1) if path != -1 else -1 for path in viterbi_path]  
+                viterbi_path.reverse()
+                viterbi_score.reverse()
+                res.append(viterbi_path)
+                res_scores.append(viterbi_score)
+
+
+            for k in range(topk):
+                for i in range(len(res[k])):
+                    out[k][offset + i] = res[k][i]
+
+            for k in range(topk):
+                for i in range(len(res_scores[k])):
+                    out_scores[k][offset_scores + i] = res_scores[k][i]
+
+            offset += len(res[0])
+            offset_scores += len(res_scores[0])
+
+        if return_viterbi_scores:
+            return out, out_scores
         return out
 
     def get_label_distribution(self, label_votes, link_votes, seq_starts):
