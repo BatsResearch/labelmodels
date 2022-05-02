@@ -58,6 +58,7 @@ class LabelModel(nn.Module):
                         argument (besides self)
         :param config: an instance of LearningConfig
         """
+        logging.info(vars(config))
 
         # Sets up optimization hyperparameters
         optimizer = torch.optim.SGD(
