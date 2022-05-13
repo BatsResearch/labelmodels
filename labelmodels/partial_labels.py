@@ -341,7 +341,7 @@ class PartialLabelModel(LabelModel):
             votes = votes[index, :]
 
         batches = [
-            torch.LongTensor(votes[i * batch_size: (i + 1) * batch_size, :].astype(np.int))
+            torch.LongTensor(votes[i * batch_size: (i + 1) * batch_size, :].astype(np.int32))
             for i in range(int(np.ceil(votes.shape[0] / batch_size)))
         ]
 
