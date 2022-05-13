@@ -37,7 +37,4 @@ jobs:
         flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        python test/test_naive_bayes.py
-        python test/test_hmm.py
-        python test/test_linked_hmm.py
-        python test/test_partial_labels.py
+        pytest
