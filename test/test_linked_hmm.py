@@ -194,7 +194,7 @@ class TestLinkedHMM(unittest.TestCase):
 
         # Makes predictions using both unary and pairwise marginals
         pred_unary = np.argmax(p_unary, axis=1) + 1
-        pred_pairwise = np.zeros((labels.shape[0],), dtype=np.int)
+        pred_pairwise = np.zeros((labels.shape[0],), dtype=np.int32)
         next_seq = 0
         for i in range(labels.shape[0] - 1):
             if next_seq == len(seq_starts) or i < seq_starts[next_seq] - 1:
@@ -224,7 +224,7 @@ def _generate_data(num_seqs, min_seq, max_seq, num_label_funcs, num_link_funcs,
                    label_accs, link_accs, label_propensities, link_propensities,
                    start_balance, transitions):
     # Generates sequence starts
-    seq_starts = np.zeros((num_seqs,), dtype=np.int)
+    seq_starts = np.zeros((num_seqs,), dtype=np.int32)
     total_len = 0
     for i in range(num_seqs):
         seq_len = np.random.randint(min_seq, max_seq + 1)
@@ -233,7 +233,7 @@ def _generate_data(num_seqs, min_seq, max_seq, num_label_funcs, num_link_funcs,
             seq_starts[i + 1] = total_len
 
     # Generates sequences of gold labels
-    gold = np.zeros((total_len,), dtype=np.int)
+    gold = np.zeros((total_len,), dtype=np.int32)
     next_start = 0
     for i in range(total_len):
         if next_start < len(seq_starts) and i == seq_starts[next_start]:
