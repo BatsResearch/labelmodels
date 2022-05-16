@@ -1,7 +1,6 @@
 from labelmodels import PartialLabelModel
 import numpy as np
 from scipy import sparse
-import test.util as util
 import torch
 import unittest
 from random import sample
