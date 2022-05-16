@@ -1,6 +1,6 @@
 # Label Models
 
-[![Build Status](https://travis-ci.com/BatsResearch/labelmodels.svg?token=sinAgJjnTsxQ2oN3R9vi&branch=master)](https://travis-ci.com/BatsResearch/labelmodels)
+[![Package Test Status](https://github.com/BatsResearch/labelmodels/actions/workflows/pkg-test.yml/badge.svg)](https://github.com/BatsResearch/labelmodels/actions/workflows/pkg-test.yml)
 
 Lightweight implementations of generative label models for weakly supervised machine learning
 
@@ -76,4 +76,32 @@ print(model.get_accuracies())
 
 # We can obtain a posterior distribution over the true labels
 labels = model.get_label_distribution(votes)
+```
+
+## Citation
+
+Please cite the following paper if you are using our tool. Thank you!
+
+[Esteban Safranchik](https://www.linkedin.com/in/safranchik/), Shiying Luo, [Stephen H. Bach](http://cs.brown.edu/people/sbach/). "Weakly Supervised Sequence Tagging From Noisy Rules". In 34th AAAI Conference on Artificial Intelligence, 2020.
+
+```
+@inproceedings{safranchik2020weakly,
+  title = {Weakly Supervised Sequence Tagging From Noisy Rules}, 
+  author = {Safranchik, Esteban and Luo, Shiying and Bach, Stephen H.}, 
+  booktitle = {AAAI}, 
+  year = 2020, 
+}
+```
+
+[Peilin Yu](https://www.yupeilin.com), [Tiffany Ding](https://tiffanyding.github.io/)
+, [Stephen H. Bach](http://cs.brown.edu/people/sbach/). "Learning from Multiple Noisy Partial Labelers". Artificial
+Intelligence and Statistics (AISTATS), 2022.
+
+```
+@inproceedings{yu2022nplm,
+  title = {Learning from Multiple Noisy Partial Labelers}, 
+  author = {Yu, Peilin and Ding, Tiffany and Bach, Stephen H.}, 
+  booktitle = {Artificial Intelligence and Statistics (AISTATS)}, 
+  year = 2022, 
+}
 ```
