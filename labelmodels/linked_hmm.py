@@ -1,3 +1,4 @@
+from cProfile import label
 from contextlib import AsyncExitStack
 from os import link
 from .label_model import ClassConditionalLabelModel, LearningConfig, init_random
@@ -363,11 +364,15 @@ class LinkedHMM(ClassConditionalLabelModel):
             path_scores = []
             path_indices = []
             T = label_votes.shape[0]
+            normalization = []
+            seq_ends = [x - 1 for x in seq_starts] + [label_votes.shape[0] - 1]
 
             for i in range(0, T):
                 if i in seq_starts:
                     path_scores.append((jll[i] + norm_start_balance).unsqueeze(0))
                     path_indices.append(torch.zeros([self.num_classes, self.num_classes]))
+
+                    alphas = (jll[i] + norm_start_balance).unsqueeze(0) # shape: (1, self.num_classes)
                 else:                  
                     p = path_scores[i-1].clone().unsqueeze(2) + norm_transitions
                     p += link_cll[i]
@@ -382,6 +387,13 @@ class LinkedHMM(ClassConditionalLabelModel):
 
                     path_scores.append(scores)
                     path_indices.append(paths)
+
+                    transition_scores = alphas.unsqueeze(2) + norm_transitions + link_cll[i]  # shape: (1, self.num_classes, self.num_classes)
+                    alphas = jll[i] + torch.logsumexp(transition_scores, dim=1)  #  shape: (1, self.num_classes)
+                
+                if i in seq_ends:
+                    log_norm = torch.logsumexp(alphas, dim=1)
+                    normalization.append(log_norm.item())
 
             res = []
             res_scores = []
@@ -434,7 +446,11 @@ class LinkedHMM(ClassConditionalLabelModel):
 
             for k in range(topk):
                 for i in range(len(res_scores[k])):
-                    out_scores[k][offset_scores + i] = res_scores[k][i]
+                    if res_scores[k][i] != -1:
+                        out_scores[k][offset_scores + i] = res_scores[k][i] - normalization[i]
+                        # out_scores[k][offset_scores + i] = res_scores[k][i]
+                    else:
+                        out_scores[k][offset_scores + i] = res_scores[k][i]
 
             offset += len(res[0])
             offset_scores += len(res_scores[0])
@@ -535,7 +551,7 @@ class LinkedHMM(ClassConditionalLabelModel):
                 p_pairwise[i] -= denom
 
                 out_pairwise[offset + i, :, :] = torch.exp(p_pairwise[i]).detach()
-
+            
             offset += label_votes.shape[0]
 
         return out_unary, out_pairwise
