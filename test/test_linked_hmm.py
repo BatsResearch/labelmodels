@@ -223,7 +223,7 @@ class TestLinkedHMM(unittest.TestCase):
     #         self.assertGreaterEqual(accuracy, .95)
 
     def test_get_k_most_probable_labels(self):
-            m = 33 # num_seqs
+            m = 34 # num_seqs
             n1 = 4 # num_labeling_funcs
             n2 = 5 # num_linking_funcs
             k = 4 # num_classes
@@ -244,7 +244,7 @@ class TestLinkedHMM(unittest.TestCase):
                         model.transitions[i, j] = 1 if i == j else 0
 
             labels, links, seq_starts, gold = _generate_data(
-                m, 8, 12, n1, n2,
+                m, 7, 7, n1, n2,
                 model.get_label_accuracies(),
                 model.get_link_accuracies(),
                 model.get_label_propensities(),
@@ -252,35 +252,195 @@ class TestLinkedHMM(unittest.TestCase):
                 model.get_start_balance(),
                 model.get_transition_matrix())
 
-            # assert that when topk = 1, the output of get_k most_probable_labels is the same as get_most_probable_labels
-            # for the fact that torch.argmax (used in get_most_probable_labels) == torch.topk (used in get_k_most_probable_labels) 
-            # when topk = 1. 
-            predictions = model.get_most_probable_labels(labels, links, seq_starts)
-            k_predictions = model.get_k_most_probable_labels(labels, links, seq_starts, topk=1)
-            self.assertIsNone(np.testing.assert_array_equal(k_predictions[0], predictions)) 
-
-            # assert that when topk > 1, the viterbi_scores of the first sequence from get_k most_probable_labels 
-            # is the same as get_most_probable_labels
-            viterbi_scores = model.get_most_probable_labels(labels, links, seq_starts, return_viterbi_scores=True)
-            k_viterbi_scores = model.get_k_most_probable_labels(labels, links, seq_starts, topk=3, return_viterbi_scores=True)
-            self.assertIsNone(np.testing.assert_array_equal(k_viterbi_scores[:, 0], viterbi_scores))
-
-            # assert that when topk > 1, all sequences from get_k most_probable_labels are different from one another
-            k_predictions = model.get_k_most_probable_labels(labels, links, seq_starts, topk=3)
-            self.assertEqual(np.unique(k_predictions, axis=0).shape[0], k_predictions.shape[0])
-
-            # labels, links, seq_starts = torch.load("/Users/zhengxinyong/Desktop/link_hmm_inputs.pt")
-            # link_hmm = LinkedHMM(
-            #     num_classes=4,
-            #     num_labeling_funcs=8,
-            #     num_linking_funcs=7,
-            #     init_acc=0.7,
-            #     acc_prior=50,
-            #     balance_prior=100)
-            # predictions = link_hmm.get_most_probable_labels(labels, links, seq_starts)
-            # k_predictions = link_hmm.get_k_most_probable_labels(labels, links, seq_starts, topk=1)
+            # model.estimate_label_model(labels, links, seq_starts)
+            # # assert that when topk = 1, the output of get_k most_probable_labels is the same as get_most_probable_labels
+            # # for the fact that torch.argmax (used in get_most_probable_labels) == torch.topk (used in get_k_most_probable_labels) 
+            # # when topk = 1. 
+            # predictions = model.get_most_probable_labels(labels, links, seq_starts)
+            # k_predictions = model.get_k_most_probable_labels(labels, links, seq_starts, topk=1)
             # self.assertIsNone(np.testing.assert_array_equal(k_predictions[0], predictions)) 
+
+            # # assert that when topk > 1, the viterbi_scores of the first sequence from get_k most_probable_labels 
+            # # is the same as get_most_probable_labels
+            # viterbi_scores = model.get_most_probable_labels(labels, links, seq_starts, return_viterbi_scores=True)
+            # k_viterbi_scores = model.get_k_most_probable_labels(labels, links, seq_starts, topk=9, return_viterbi_scores=True)
+            # self.assertIsNone(np.testing.assert_array_equal(k_viterbi_scores[:, 0], viterbi_scores))
+
+            # # assert that when topk > 1, all sequences from get_k most_probable_labels are different from one another
+            # k_predictions = model.get_k_most_probable_labels(labels, links, seq_starts, topk=3)
+            # self.assertEqual(np.unique(k_predictions, axis=0).shape[0], k_predictions.shape[0])
+
+            # # assert that when topk > 1, the viterbi scores are in a non-increasing order.
+
+            ### 👀 Ontonotes
+            labels, links, seq_starts = torch.load("/Users/zhengxinyong/Desktop/labelmodels/downloads/link_hmm_inputs.pt")
+            print(labels.shape, links.shape) #### change num_labeling_funcs according given NoABS labeling function
+            acc_prior = 50
+            link_hmm = LinkedHMM(
+                num_classes=4,
+                num_labeling_funcs=8, 
+                num_linking_funcs=7,
+                init_acc=0.7,
+                acc_prior=acc_prior,
+                balance_prior=100)
+            # link_hmm.estimate_label_model(labels, links, seq_starts)
+            link_hmm_saved_fp = f"/Users/zhengxinyong/Desktop/labelmodels/ontonotes/labelmodel_link_hmm_prior_{acc_prior}.pt"
+            # # torch.save(link_hmm, link_hmm_saved_fp)
+            link_hmm = torch.load(link_hmm_saved_fp)
+            print(f"✅ Done loading link hmm with acc_prior={acc_prior}.")
+            print("get label accuracies:")
+            print(link_hmm.get_label_accuracies())
+            print("get label propensities:")
+            print(link_hmm.get_label_accuracies())
+            print("get link accuracies:")
+            print(link_hmm.get_link_accuracies())
+            print("get link propensities:")
+            print(link_hmm.get_link_propensities())
+            print("get start balance:")
+            print(link_hmm.get_start_balance())
+            print("get transition matrix:")
+            print(link_hmm.get_transition_matrix())
             
+            print(link_hmm.get_label_distribution(labels, links, seq_starts))
+
+            # K = [5000]
+            # for k in K:
+            #     # viterbi_paths, viterbi_scores = link_hmm.get_k_most_probable_labels(labels[12066:12071, :], links[12066:12071, :], [0], topk=k, return_viterbi_scores=True)
+            #     viterbi_paths, viterbi_scores = link_hmm.get_k_most_probable_labels(labels, links, seq_starts, topk=k, return_viterbi_scores=True)
+            #     # print(seq_starts)
+            #     # print(np.sum(np.exp(viterbi_scores), 0))
+            #     print(f"✅ Done generating {k} (acc prior {acc_prior}).")
+            #     print(viterbi_scores)
+            #     torch.save(viterbi_paths, f"/Users/zhengxinyong/Desktop/labelmodels/ontonotes/{k}_viterbi_paths_prior_{acc_prior}.pt")
+            #     torch.save(viterbi_scores, f"/Users/zhengxinyong/Desktop/labelmodels/ontonotes/{k}_viterbi_scores_prior_{acc_prior}.pt")
+            
+            # viterbi_paths = torch.load("/Users/zhengxinyong/Desktop/labelmodels/ontonotes/5_viterbi_paths.pt")
+            # viterbi_scores = torch.load("/Users/zhengxinyong/Desktop/labelmodels/ontonotes/5_viterbi_scores.pt")
+            # print(viterbi_scores)
+            # print(viterbi_paths.shape)
+            # print(viterbi_scores.shape)
+            
+            #### Ontonotes instance check: ensure that viterbi paths are correct (when topk > possible enumeration of sequences)
+            # instance 780 only has 4 tokens
+            # if k > 256:
+            #     self.assertEqual(sum(viterbi_paths[256][seq_starts[780]:seq_starts[781]]), -4)
+            #     self.assertEqual(viterbi_scores[256][780], -1)
+
+            # instance 498, 561, 751, 769, 779, 784, 821, 822, 858 have 5 tokens
+
+            # #### Ontonotes instance check: check scores
+            # self.assertEqual(viterbi_scores[0][31], -112.71656799316406)
+            # predictions, scores = link_hmm.get_most_probable_labels(labels, links, seq_starts, return_viterbi_scores=True)
+            # self.assertEqual(scores[31], -112.71656799316406)
+
+            # #### NECESSARY BUT INSUFFICIENT - comparison between get_most_probable and get_k_most_probable
+            # self.assertIsNone(np.testing.assert_array_equal(viterbi_paths[0, :], predictions)) 
+            # self.assertIsNone(np.testing.assert_array_equal(viterbi_scores[0, :], scores)) 
+
+
+            # #### 💻 Laptop Reviews
+            # labels, links, seq_starts = torch.load("/Users/zhengxinyong/Desktop/labelmodels/downloads/laptop_link_hmm_inputs.pt")
+            # # print(labels.shape, links.shape) #### change num_labeling_funcs according given NoABS labeling function
+            # link_hmm_saved_fp = f"/Users/zhengxinyong/Desktop/labelmodels/downloads/laptop_esteban_link_hmm.pt"
+            # link_hmm = torch.load(link_hmm_saved_fp)
+            # print("get label accuracies:")
+            # print(link_hmm.get_label_accuracies())
+            # print("get label propensities:")
+            # print(link_hmm.get_label_accuracies())
+            # print("get link accuracies:")
+            # print(link_hmm.get_link_accuracies())
+            # print("get link propensities:")
+            # print(link_hmm.get_link_propensities())
+            # print("get start balance:")
+            # print(link_hmm.get_start_balance())
+            # print("get transition matrix:")
+            # print(link_hmm.get_transition_matrix())
+            # print(f"smallest number of tokens in a sequence: {min([seq_starts[i + 1] - seq_starts[i] for i in range(len(seq_starts) - 1)])}")
+            # print(f"largest number of tokens in a sequence: {max([seq_starts[i + 1] - seq_starts[i] for i in range(len(seq_starts) - 1)])}")
+
+            # K = [1, 2, 3, 4, 5]
+            # for k in K:
+            #     viterbi_paths, viterbi_scores = link_hmm.get_k_most_probable_labels(labels, links, seq_starts, topk=k, return_viterbi_scores=True)
+            #     torch.save(viterbi_paths, f"/Users/zhengxinyong/Desktop/labelmodels/laptop/{k}_viterbi_paths.pt")
+            #     torch.save(viterbi_scores, f"/Users/zhengxinyong/Desktop/labelmodels/laptop/{k}_viterbi_scores.pt")
+            #     print(f"✅ Laptop Reviews: Done generating {k}.")
+
+            # predictions, scores = link_hmm.get_most_probable_labels(labels, links, seq_starts, return_viterbi_scores=True)
+            # viterbi_paths = torch.load(f"/Users/zhengxinyong/Desktop/labelmodels/laptop/10_viterbi_paths.pt")
+
+            # self.assertIsNone(np.testing.assert_array_equal(viterbi_paths[0, :], predictions)) 
+            # print(-1 in viterbi_paths)
+
+            # #### 🥼 NCBI
+            # labels, links, seq_starts = torch.load("/Users/zhengxinyong/Desktop/labelmodels/downloads/ncbi_link_hmm_inputs.pt")
+            # # print(labels.shape, links.shape) #### change num_labeling_funcs according given NoABS labeling function
+            # link_hmm_saved_fp = f"/Users/zhengxinyong/Desktop/labelmodels/downloads/ncbi_esteban_link_hmm.pt"
+            # link_hmm = torch.load(link_hmm_saved_fp)
+            # print("get label accuracies:")
+            # print(link_hmm.get_label_accuracies())
+            # print("get label propensities:")
+            # print(link_hmm.get_label_accuracies())
+            # print("get link accuracies:")
+            # print(link_hmm.get_link_accuracies())
+            # print("get link propensities:")
+            # print(link_hmm.get_link_propensities())
+            # print("get start balance:")
+            # print(link_hmm.get_start_balance())
+            # print("get transition matrix:")
+            # print(link_hmm.get_transition_matrix())
+
+            # print(f"smallest number of tokens in a sequence: {min([seq_starts[i + 1] - seq_starts[i] for i in range(len(seq_starts) - 1)])}")
+            # print(f"largest number of tokens in a sequence: {max([seq_starts[i + 1] - seq_starts[i] for i in range(len(seq_starts) - 1)])}")
+
+            # for i in range(len(seq_starts) - 1):
+            #     print(seq_starts[i + 1] - seq_starts[i], seq_starts[i], seq_starts[i + 1])
+
+            # K = [1, 2, 3, 4, 5]
+            # for k in K:
+            #     viterbi_paths, viterbi_scores = link_hmm.get_k_most_probable_labels(labels, links, seq_starts, topk=k, return_viterbi_scores=True)
+            #     torch.save(viterbi_paths, f"/Users/zhengxinyong/Desktop/labelmodels/ncbi/{k}_viterbi_paths.pt")
+            #     torch.save(viterbi_scores, f"/Users/zhengxinyong/Desktop/labelmodels/ncbi/{k}_viterbi_scores.pt")
+            #     print(f"✅ NCBI: Done generating {k}.")
+
+            # viterbi_paths = torch.load(f"/Users/zhengxinyong/Desktop/labelmodels/ncbi/1_viterbi_paths.pt")
+            # # print(viterbi_paths[0, 1242:1316])
+            # # predictions, scores = link_hmm.get_most_probable_labels(labels, links, seq_starts, return_viterbi_scores=True)
+            # self.assertIsNone(np.testing.assert_array_equal(viterbi_paths[0, :], predictions)) 
+            
+            
+            # #### 💿 CDR
+            # labels, links, seq_starts = torch.load("/Users/zhengxinyong/Desktop/labelmodels/downloads/cdr_link_hmm_inputs.pt")
+            # # print(labels.shape, links.shape) #### change num_labeling_funcs according given NoABS labeling function
+            # link_hmm_saved_fp = f"/Users/zhengxinyong/Desktop/labelmodels/downloads/cdr_esteban_link_hmm.pt"
+            # link_hmm = torch.load(link_hmm_saved_fp)
+            # print("get label accuracies:")
+            # print(link_hmm.get_label_accuracies())
+            # print("get label propensities:")
+            # print(link_hmm.get_label_accuracies())
+            # print("get link accuracies:")
+            # print(link_hmm.get_link_accuracies())
+            # print("get link propensities:")
+            # print(link_hmm.get_link_propensities())
+            # print("get start balance:")
+            # print(link_hmm.get_start_balance())
+            # print("get transition matrix:")
+            # print(link_hmm.get_transition_matrix())
+
+            # print(f"smallest number of tokens in a sequence: {min([seq_starts[i + 1] - seq_starts[i] for i in range(len(seq_starts) - 1)])}")
+            # print(f"largest number of tokens in a sequence: {max([seq_starts[i + 1] - seq_starts[i] for i in range(len(seq_starts) - 1)])}")
+
+            # K = [1, 2, 3, 4, 5]
+            # for k in K:
+            #     viterbi_paths, viterbi_scores = link_hmm.get_k_most_probable_labels(labels, links, seq_starts, topk=k, return_viterbi_scores=True)
+            #     torch.save(viterbi_paths, f"/Users/zhengxinyong/Desktop/labelmodels/cdr/{k}_viterbi_paths.pt")
+            #     torch.save(viterbi_scores, f"/Users/zhengxinyong/Desktop/labelmodels/cdr/{k}_viterbi_scores.pt")
+            #     print(f"✅ BC5CDR: Done generating {k}.")
+
+            # viterbi_paths = torch.load(f"/Users/zhengxinyong/Desktop/labelmodels/cdr/10_viterbi_paths.pt")
+            # predictions, scores = link_hmm.get_most_probable_labels(labels, links, seq_starts, return_viterbi_scores=True)
+            # self.assertIsNone(np.testing.assert_array_equal(viterbi_paths[0, :], predictions)) 
+
+            # print(-1 in viterbi_paths)
             
             
 
