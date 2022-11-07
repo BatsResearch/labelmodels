@@ -303,7 +303,7 @@ class LinkedHMM(ClassConditionalLabelModel):
                 else:
                     temp = beta[i+1] + label_cll[i+1]
                     temp = temp.unsqueeze(1).repeat(1, self.num_classes)
-                    temp = temp + self._get_norm_transitions()
+                    temp = temp + self._get_norm_transitions().transpose(0, 1)
                     temp += link_cll[i+1]
                     beta[i, :] = temp.logsumexp(0)
 

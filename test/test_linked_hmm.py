@@ -219,6 +219,56 @@ class TestLinkedHMM(unittest.TestCase):
             accuracy = correct / float(len(predictions))
             self.assertGreaterEqual(accuracy, .95)
 
+        ##### ensure marginalization of p_pairwise matches p_unary
+        # create a simple and trained linkHMM.
+        n1 = 5
+        n2 = 3
+        k = 2
+
+        label_accuracies = np.array([[.9, .8],
+                                     [.6, .7],
+                                     [.6, .6],
+                                     [.7, .6],
+                                     [.8, .8]])
+        link_accuracies = np.array([.8, .6, .8])
+        label_propensities = np.array([.9] * n1)
+        link_propensities = np.array([.9] * n1)
+        start_balance = np.array([.3, .7])
+        transitions = np.array([[.5, .5], [.3, .7]])
+
+        labels, links, seq_starts, gold = _generate_data(
+            10, 8, 12, n1, n2,
+            label_accuracies,
+            link_accuracies,
+            label_propensities,
+            link_propensities,
+            start_balance,
+            transitions
+        )
+        model = LinkedHMM(k, n1, n2, acc_prior=0.0, balance_prior=0.0)
+        config = LearningConfig()
+        config.epochs = 3
+        model.estimate_label_model(labels, links, seq_starts, config=config)
+
+        # get unary and pairwise marginals
+        p_unary, p_pairwise = model.get_label_distribution(labels, links, seq_starts)
+
+        # marginalize pairwise over t + 1
+        for un, pa in zip(p_unary, np.sum(p_pairwise, axis= 2)):
+            if np.sum(pa)==0: # last pairwise_marginal is empty because it does not have t + 1 transition
+                continue
+            for i in range(un.shape[0]):
+                self.assertAlmostEqual(un[i], pa[i], places=3)
+
+        # marginalize pairwise over t
+        for i, pa in enumerate(np.sum(p_pairwise, axis= 1)):
+            if i + 1 >= len(p_unary) or i + 1 in seq_starts: 
+                # skip if p_unary[i + 1[ goes into new sequence
+                continue
+            un = p_unary[i + 1]
+            for j in range(un.shape[0]):
+                self.assertAlmostEqual(un[j], pa[j], places=3)
+
 
 def _generate_data(num_seqs, min_seq, max_seq, num_label_funcs, num_link_funcs,
                    label_accs, link_accs, label_propensities, link_propensities,

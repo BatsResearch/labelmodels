@@ -171,6 +171,46 @@ class TestHMM(unittest.TestCase):
             accuracy = correct / float(len(predictions))
             self.assertGreaterEqual(accuracy, .95)
 
+        ##### ensure marginalization of p_pairwise matches p_unary
+        # create a simple and trained HMM.
+        n = 5
+        k = 2
+
+        accuracies = np.array([[.9, .8],
+                               [.6, .7],
+                               [.6, .6],
+                               [.7, .6],
+                               [.8, .8]])
+        propensities = np.array([.9] * n)
+        start_balance = np.array([.3, .7])
+        transitions = np.array([[.5, .5], [.3, .7]])
+
+        labels_train, seq_starts_train, gold_train = _generate_data(
+            10, 8, 12, n, accuracies, propensities, start_balance, transitions
+        )
+
+        model = HMM(k, n, acc_prior=0.0, balance_prior=0.0)
+        model.estimate_label_model(labels_train, seq_starts_train)
+
+        # get unary and pairwise marginals
+        p_unary, p_pairwise = model.get_label_distribution(labels_train, seq_starts_train)
+
+        # marginalize pairwise over t + 1
+        for un, pa in zip(p_unary, np.sum(p_pairwise, axis= 2)):
+            if np.sum(pa)==0: # last pairwise_marginal is empty because it does not have t + 1 transition
+                continue
+            for i in range(un.shape[0]):
+                self.assertAlmostEqual(un[i], pa[i], places=3)
+
+        # marginalize pairwise over t
+        for i, pa in enumerate(np.sum(p_pairwise, axis= 1)):
+            if i + 1 >= len(p_unary) or i + 1 in seq_starts_train: 
+                # skip if p_unary[i + 1[ goes into new sequence
+                continue
+            un = p_unary[i + 1]
+            for j in range(un.shape[0]):
+                self.assertAlmostEqual(un[j], pa[j], places=3)
+
 
 def _generate_data(num_seqs, min_seq, max_seq, num_lfs, accuracies,
                    propensities, start_balance, transitions):
