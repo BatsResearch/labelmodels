@@ -101,8 +101,8 @@ class HMM(ClassConditionalLabelModel):
         init_random(config.random_seed)
 
         # Converts to CSR and integers to standardize input
-        votes = sparse.csr_matrix(votes, dtype=np.int)
-        seq_starts = np.array(seq_starts, dtype=np.int)
+        votes = sparse.csr_matrix(votes, dtype=np.int32)
+        seq_starts = np.array(seq_starts, dtype=np.int32)
 
         batches = self._create_minibatches(
             votes, seq_starts, config.batch_size, shuffle_seqs=True)
@@ -125,10 +125,10 @@ class HMM(ClassConditionalLabelModel):
         :return: vector of length m, where element is the most likely predicted labels
         """
         # Converts to CSR and integers to standardize input
-        votes = sparse.csr_matrix(votes, dtype=np.int)
-        seq_starts = np.array(seq_starts, dtype=np.int)
+        votes = sparse.csr_matrix(votes, dtype=np.int32)
+        seq_starts = np.array(seq_starts, dtype=np.int32)
 
-        out = np.ndarray((votes.shape[0],), dtype=np.int)
+        out = np.ndarray((votes.shape[0],), dtype=np.int32)
 
         offset = 0
         for votes, seq_starts in self._create_minibatches(votes, seq_starts, 32):
@@ -185,8 +185,8 @@ class HMM(ClassConditionalLabelModel):
                  k x k matrix will be all zeros.
         """
         # Converts to CSR and integers to standardize input
-        votes = sparse.csr_matrix(votes, dtype=np.int)
-        seq_starts = np.array(seq_starts, dtype=np.int)
+        votes = sparse.csr_matrix(votes, dtype=np.int32)
+        seq_starts = np.array(seq_starts, dtype=np.int32)
 
         out_unary = np.zeros((votes.shape[0], self.num_classes))
         out_pairwise = np.zeros((votes.shape[0], self.num_classes, self.num_classes))
@@ -274,7 +274,7 @@ class HMM(ClassConditionalLabelModel):
 
     def _create_minibatches(self, votes, seq_starts, batch_size, shuffle_seqs=False):
         # Computes explicit seq ends so that we can shuffle the sequences
-        seq_ends = np.ndarray((seq_starts.shape[0],), dtype=np.int)
+        seq_ends = np.ndarray((seq_starts.shape[0],), dtype=np.int32)
         for i in range(1, seq_starts.shape[0]):
             seq_ends[i-1] = seq_starts[i] - 1
         seq_ends[-1] = votes.shape[0] - 1
@@ -306,7 +306,7 @@ class HMM(ClassConditionalLabelModel):
         rel_seq_start_batches = []
         for seq_start_batch, seq_end_batch in zip(seq_start_batches, seq_end_batches):
             vote_batch = []
-            rel_seq_start_batch = np.zeros((len(seq_start_batch),), dtype=np.int)
+            rel_seq_start_batch = np.zeros((len(seq_start_batch),), dtype=np.int32)
             total_len = 0
             for i, (start, end) in enumerate(zip(seq_start_batch, seq_end_batch)):
                 vote_batch.append(votes[start:end+1])

@@ -132,9 +132,9 @@ class LinkedHMM(ClassConditionalLabelModel):
         init_random(config.random_seed)
 
         # Converts to CSR and integers to standardize input
-        label_votes = sparse.csr_matrix(label_votes, dtype=np.int)
-        link_votes = sparse.csr_matrix(link_votes, dtype=np.int)
-        seq_starts = np.array(seq_starts, dtype=np.int)
+        label_votes = sparse.csr_matrix(label_votes, dtype=np.int32)
+        link_votes = sparse.csr_matrix(link_votes, dtype=np.int32)
+        seq_starts = np.array(seq_starts, dtype=np.int32)
 
         batches = self._create_minibatches(
             label_votes, link_votes, seq_starts, config.batch_size, shuffle_seqs=True)
@@ -193,11 +193,11 @@ class LinkedHMM(ClassConditionalLabelModel):
         :return: vector of length m, where element is the most likely predicted labels
         """
         # Converts to CSR and integers to standardize input
-        label_votes = sparse.csr_matrix(label_votes, dtype=np.int)
-        link_votes = sparse.csr_matrix(link_votes, dtype=np.int)
-        seq_starts = np.array(seq_starts, dtype=np.int)
+        label_votes = sparse.csr_matrix(label_votes, dtype=np.int32)
+        link_votes = sparse.csr_matrix(link_votes, dtype=np.int32)
+        seq_starts = np.array(seq_starts, dtype=np.int32)
 
-        out = np.ndarray((label_votes.shape[0],), dtype=np.int)
+        out = np.ndarray((label_votes.shape[0],), dtype=np.int32)
 
         offset = 0
         for label_votes, link_votes, seq_starts in self._create_minibatches(
@@ -262,9 +262,9 @@ class LinkedHMM(ClassConditionalLabelModel):
                  k x k matrix will be all zeros.
         """
         # Converts to CSR and integers to standardize input
-        label_votes = sparse.csr_matrix(label_votes, dtype=np.int)
-        link_votes = sparse.csr_matrix(link_votes, dtype=np.int)
-        seq_starts = np.array(seq_starts, dtype=np.int)
+        label_votes = sparse.csr_matrix(label_votes, dtype=np.int32)
+        link_votes = sparse.csr_matrix(link_votes, dtype=np.int32)
+        seq_starts = np.array(seq_starts, dtype=np.int32)
 
         out_unary = np.zeros((label_votes.shape[0], self.num_classes))
         out_pairwise = np.zeros((label_votes.shape[0], self.num_classes, self.num_classes))
@@ -362,7 +362,7 @@ class LinkedHMM(ClassConditionalLabelModel):
                              "of rows")
 
         # Computes explicit seq ends so that we can shuffle the sequences
-        seq_ends = np.ndarray((seq_starts.shape[0],), dtype=np.int)
+        seq_ends = np.ndarray((seq_starts.shape[0],), dtype=np.int32)
         for i in range(1, seq_starts.shape[0]):
             seq_ends[i - 1] = seq_starts[i] - 1
         seq_ends[-1] = label_votes.shape[0] - 1
@@ -398,7 +398,7 @@ class LinkedHMM(ClassConditionalLabelModel):
         for seq_start_batch, seq_end_batch in zip(seq_start_batches, seq_end_batches):
             label_vote_batch = []
             link_vote_batch = []
-            rel_seq_start_batch = np.zeros((len(seq_start_batch),), dtype=np.int)
+            rel_seq_start_batch = np.zeros((len(seq_start_batch),), dtype=np.int32)
             total_len = 0
             for i, (start, end) in enumerate(zip(seq_start_batch, seq_end_batch)):
                 label_vote_batch.append(label_votes[start:end + 1])

@@ -79,7 +79,7 @@ class NaiveBayes(ClassConditionalLabelModel):
         init_random(config.random_seed)
 
         # Converts to CSR to standardize input
-        votes = sparse.csr_matrix(votes, dtype=np.int)
+        votes = sparse.csr_matrix(votes, dtype=np.int32)
 
         batches = self._create_minibatches(
             votes, config.batch_size, shuffle_rows=True)
@@ -96,7 +96,7 @@ class NaiveBayes(ClassConditionalLabelModel):
                  the true class label for the corresponding example
         """
         # Converts to CSR to standardize input
-        votes = sparse.csr_matrix(votes, dtype=np.int)
+        votes = sparse.csr_matrix(votes, dtype=np.int32)
 
         labels = np.ndarray((votes.shape[0], self.num_classes))
         batches = self._create_minibatches(votes, 4096, shuffle_rows=False)
