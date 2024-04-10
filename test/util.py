@@ -12,7 +12,7 @@ def get_all_formats(matrix):
     other_formats = [
         matrix.todense(),
         matrix.todense().tolist(),
-        matrix.todense().astype(np.float),
+        matrix.todense().astype(np.float64),
         matrix.tocoo(),
         matrix.tocsc(),
         matrix.todia(),
