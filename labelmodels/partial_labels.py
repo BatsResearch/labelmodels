@@ -1,3 +1,4 @@
+from typing import Callable, Dict, List
 from .label_model import LabelModel, init_random, LearningConfig
 import numpy as np
 from scipy import sparse
@@ -28,7 +29,8 @@ class PartialLabelModel(LabelModel):
 
     def __init__(self, num_classes,
                  label_partition,
-                 init_acc=0.7, preset_classbalance=None,
+                 init_acc=0.7,
+                 acc_prior=0.025, preset_classbalance=None,
                  learn_class_balance=True,
                  device='cpu'):
         """Constructor.
@@ -54,6 +56,7 @@ class PartialLabelModel(LabelModel):
         self.preset_classbalance = preset_classbalance
         self.num_classes = num_classes
         self.init_acc = -1 * np.log(1.0 / init_acc - 1) / 2
+        self.acc_prior = acc_prior
         self.label_partition = label_partition
         self.num_df = len(label_partition)
 
@@ -121,7 +124,7 @@ class PartialLabelModel(LabelModel):
         joint_ll = conditional_ll + class_ll
         return torch.logsumexp(joint_ll, dim=1)
 
-    def estimate_label_model(self, votes, config=None):
+    def estimate_label_model(self, votes, config=None, eval_votes=None, logging_callback: Callable[[np.ndarray, np.ndarray, float], None] = None):
         """Estimates the parameters of the label model based on observed
         labeling function outputs.
         """
@@ -133,7 +136,7 @@ class PartialLabelModel(LabelModel):
 
         batches = self._setup(votes, config.batch_size, shuffle=True)
 
-        self._do_estimate_label_model(batches, config)
+        self._do_estimate_label_model(batches, config, eval_votes, logging_callback)
 
     def get_label_distribution(self, votes, annot_batch_sz=2048):
         """Returns the posterior distribution over true labels given labeling
@@ -197,7 +200,7 @@ class PartialLabelModel(LabelModel):
         prop = self.propensity.detach().cpu().numpy()
         return np.exp(prop) / (np.exp(prop) + 1)
 
-    def _do_estimate_label_model(self, batches, config):
+    def _do_estimate_label_model(self, batches, config, eval_votes, logging_callback: Callable[[np.ndarray, np.ndarray, float], None] = None):
         """Internal method for optimizing model parameters.
 
         :param batches: sequence of inputs to forward(). The sequence must
@@ -231,11 +234,23 @@ class PartialLabelModel(LabelModel):
                 optimizer.zero_grad()
                 log_likelihood = self(inputs, i_batch)
                 loss = -1 * torch.mean(log_likelihood)
-                loss += self._get_regularization_loss()
+                reg_loss = self._get_regularization_loss()
+                loss += reg_loss
                 loss.backward()
                 optimizer.step()
                 running_loss += loss
-                epoch_loss.append(float(loss.item()))
+
+                epoch_loss_i = float(loss.item())
+
+                epoch_loss.append(epoch_loss_i)
+                if logging_callback is not None:
+                    frozen_lm = dc(self)
+                    step = epoch * len(batches) + i_batch
+                    logging_callback(step, inputs, epoch_loss_i, reg_loss, frozen_lm.get_label_distribution(eval_votes))
+
+                    # Free the copy at every step so as to not hog all the RAM
+                    del frozen_lm
+
             epoch_loss = running_loss / len(batches)
             logging.info('Train Loss: %.6f', epoch_loss)
             if torch.sum(torch.abs(self.accuracy - ga)) < 1e-7:
@@ -292,7 +307,7 @@ class PartialLabelModel(LabelModel):
 
         :return: regularization loss
         """
-        return 0.0
+        return self.acc_prior * torch.norm(self.accuracy - self.init_acc)
 
     def _get_norm_class_balance(self):
         return self.class_balance - torch.logsumexp(self.class_balance, dim=0)
